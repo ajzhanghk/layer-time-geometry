@@ -144,6 +144,30 @@ layer-time-geometry/
   pyproject.toml             # Package configuration
 ```
 
+## Citation
+
+If you use this library or book in your work, please cite:
+
+```bibtex
+@book{sudjianto2026layertime,
+  title     = {Layer--Time Geometry: How Language Models Process Information},
+  author    = {Sudjianto, Agus and Zhang, Aijun},
+  year      = {2026},
+  url       = {https://github.com/asudjianto-xml/layer-time-geometry}
+}
+```
+
+For the research monograph:
+
+```bibtex
+@book{sudjianto2026layertimeformal,
+  title     = {Layer--Time Geometry of Transformer Computation: Kernels,
+               Operators, and Dependency in Language Models},
+  author    = {Sudjianto, Agus and Zhang, Aijun},
+  year      = {2026}
+}
+```
+
 ## Authors
 
 - **Agus Sudjianto** -- H2O.ai

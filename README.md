@@ -99,7 +99,7 @@ Nine Jupyter notebooks in `tutorials/`, one per chapter of the companion book. E
 
 ## The Companion Book
 
-`monograph_undergrad.pdf` (103 pages) is a practical, hands-on companion that explains all concepts with intuition, code, and worked examples. No differential geometry or measure theory required -- just linear algebra and basic calculus.
+`monograph_undergrad.pdf` (105 pages) is a practical, hands-on companion that explains all concepts with intuition, code, and worked examples. No differential geometry or measure theory required -- just linear algebra and basic calculus.
 
 The book includes three appendices for readers who need background:
 

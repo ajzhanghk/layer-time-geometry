@@ -187,6 +187,44 @@ That is the question this book answers. It is a practical, hands-on companion
 to the research monograph, replacing formal proofs with intuition, code, and
 visualizations.
 
+\subsection*{Why this book is useful}
+
+This book will not teach you to reverse-engineer every circuit in a
+transformer. Methods like activation patching, probing, and circuit tracing
+are powerful for explaining model behavior locally---identifying which heads,
+neurons, or pathways drive a specific output. This book serves a different
+purpose.
+
+It teaches you how to \emph{measure the global computational regime} of a
+model: where nontrivial computation concentrates across the full layer--time
+field, how prompts and models differ internally, how dependency and control
+are organized, and how to run practical diagnostics for reasoning-related
+failures, memory use, and steering.
+
+In that sense, the framework sits at a \textbf{mesoscopic layer} between
+black-box evaluation (which tells you \emph{what} the model got wrong) and
+fine-grained circuit tracing (which tells you \emph{which specific component}
+is responsible):
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l@{}}
+\toprule
+\textbf{Level} & \textbf{Method} & \textbf{Question answered} \\
+\midrule
+Black-box evaluation & Benchmarks, red-teaming &
+  Did the model get it right? \\
+\textbf{Layer--time geometry} & \textbf{This book} &
+  \textbf{Where and how does computation organize?} \\
+Circuit tracing & Activation patching, probing &
+  Which head or neuron is responsible? \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Use layer--time geometry to find the interesting regions and regimes; use
+tracing to zoom in mechanistically.
+
 \subsection*{What you need}
 
 \begin{itemize}[nosep]

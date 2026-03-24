@@ -11,7 +11,7 @@ from layer_time_geometry import (
     OperatorDecomposition,
 )
 from ._compat import resolve_device, is_gpu
-from .results import AnalysisResult, ComparisonResult, SteeringResult, GenerationResult
+from .results import AnalysisResult, ComparisonResult, SteeringResult, GenerationResult, CapacityResult
 
 
 class LayerTimeAnalyzer:
@@ -352,6 +352,75 @@ class LayerTimeAnalyzer:
             after=result_after,
             diagnostics=diagnostics,
         )
+
+    # ── Capacity Analysis ─────────────────────────────────────────
+
+    def capacity_analysis(
+        self,
+        text: str,
+        method: str = "exact",
+        compute_dependency: bool = True,
+    ) -> CapacityResult:
+        """Compute compositional capacity metrics for a single prompt.
+
+        Extracts hidden states, computes skew generators from polar
+        decomposition, then accumulated non-commutativity and
+        dependency-weighted effective capacity.
+
+        Args:
+            text: Input prompt.
+            method: "exact" (logm of lifted polar factor) or
+                    "bivector" (fast approximation).
+            compute_dependency: If True, compute gradient-based
+                dependency density for C_eff weighting.
+
+        Returns:
+            CapacityResult with capacity profile and optional dependency.
+        """
+        from .capacity import compute_capacity_profile
+
+        self._require_metric()
+        result = self.analyze(text)
+
+        D_layer = None
+        dep = None
+        if compute_dependency:
+            dep = ltg.compute_dependency_density(
+                self.model, self.tokenizer, text, self._metric, self._device,
+            )
+            D_layer = dep.D_layer
+
+        cap = compute_capacity_profile(
+            result.whitened, D_layer=D_layer, method=method,
+        )
+
+        return CapacityResult(
+            prompt=text,
+            tokens=result.tokens,
+            capacity=cap,
+            dependency=dep,
+            analysis=result,
+        )
+
+    def capacity_batch(
+        self,
+        texts: list[str],
+        method: str = "exact",
+        compute_dependency: bool = True,
+    ) -> list[CapacityResult]:
+        """Compute capacity analysis for multiple prompts.
+
+        Args:
+            texts: List of input prompts.
+            method: "exact" or "bivector".
+            compute_dependency: Whether to compute dependency density.
+
+        Returns:
+            List of CapacityResult, one per prompt.
+        """
+        return [
+            self.capacity_analysis(t, method, compute_dependency) for t in texts
+        ]
 
     # ── Generation-Time Analysis ──────────────────────────────────
 

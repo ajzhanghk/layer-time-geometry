@@ -10,10 +10,12 @@ from layer_time_geometry import (
     SampleGeometry,
     SteeringDiagnostics,
     GenerationGeometry,
+    DependencyProfile,
     sample_feature_vector,
     generation_curvature_evolution,
     generation_attention_shift,
 )
+from layer_time.capacity import CapacityProfile
 
 
 @dataclass
@@ -182,3 +184,33 @@ class GenerationResult:
             )
             rows.append(row)
         return rows
+
+
+@dataclass
+class CapacityResult:
+    """Compositional capacity analysis for a single prompt.
+
+    Attributes:
+        prompt: The input text.
+        tokens: Decoded token strings.
+        capacity: CapacityProfile with all capacity metrics.
+        dependency: DependencyProfile if computed, else None.
+        analysis: Full AnalysisResult if computed alongside, else None.
+    """
+
+    prompt: str
+    tokens: list[str]
+    capacity: CapacityProfile
+    dependency: Optional[DependencyProfile] = None
+    analysis: Optional[AnalysisResult] = None
+
+    def summary(self) -> dict:
+        """Key capacity metrics as a flat dictionary."""
+        return {
+            "prompt": self.prompt,
+            "C_acc": self.capacity.C_acc,
+            "C_eff": self.capacity.C_eff,
+            "cconc_acc": self.capacity.cconc_acc,
+            "method": self.capacity.method,
+            "n_generators": len(self.capacity.A_generators),
+        }

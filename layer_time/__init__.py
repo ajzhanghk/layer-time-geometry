@@ -31,7 +31,7 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from .analyzer import LayerTimeAnalyzer
-from .results import AnalysisResult, ComparisonResult, SteeringResult, GenerationResult
+from .results import AnalysisResult, ComparisonResult, SteeringResult, GenerationResult, CapacityResult
 from .plotting import (
     plot_curvature_heatmap,
     plot_operator_profile,
@@ -44,6 +44,10 @@ from .plotting import (
     plot_generation_trajectory,
     plot_frontier_curvature,
     plot_attention_shift,
+    plot_commutator_heatmap,
+    plot_capacity_comparison,
+    plot_correctness_separation,
+    plot_scaling_summary,
 )
 
 from layer_time_geometry import (
@@ -53,7 +57,10 @@ from layer_time_geometry import (
     OperatorDecomposition,
     SteeringDiagnostics,
     GenerationGeometry,
+    DependencyProfile,
 )
+from .capacity import CapacityProfile, compute_capacity_profile
+from .scaling import ScalingExperiment, PairwiseComparison
 
 __all__ = [
     # Main class
@@ -63,6 +70,7 @@ __all__ = [
     "ComparisonResult",
     "SteeringResult",
     "GenerationResult",
+    "CapacityResult",
     # Backend dataclasses
     "MetricStructure",
     "SampleGeometry",
@@ -70,6 +78,13 @@ __all__ = [
     "OperatorDecomposition",
     "SteeringDiagnostics",
     "GenerationGeometry",
+    "DependencyProfile",
+    # Capacity analysis
+    "CapacityProfile",
+    "compute_capacity_profile",
+    # Scaling experiment
+    "ScalingExperiment",
+    "PairwiseComparison",
     # Plotting — static analysis
     "plot_curvature_heatmap",
     "plot_operator_profile",
@@ -83,4 +98,9 @@ __all__ = [
     "plot_generation_trajectory",
     "plot_frontier_curvature",
     "plot_attention_shift",
+    # Plotting — capacity / scaling
+    "plot_commutator_heatmap",
+    "plot_capacity_comparison",
+    "plot_correctness_separation",
+    "plot_scaling_summary",
 ]

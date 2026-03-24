@@ -1821,6 +1821,225 @@ the attention mechanism?
 \end{tryit}
 
 
+\section{Does more geometry mean better reasoning?}
+\label{sec:scaling-capacity}
+
+Everything in this chapter says reasoning requires three things working
+together: interaction, propagation, and dependency. But does a bigger model
+automatically get better at combining them? And does distilling from a
+strong reasoning model help?
+
+This section answers both questions with a concrete experiment.
+
+\begin{analogy}
+Think of an orchestra. A bigger orchestra has more instruments playing---more
+raw ``musical complexity.'' But unless the instruments are coordinated with
+the melody that the audience hears, more instruments just means more noise.
+Scaling adds instruments. Distillation teaches them to play together.
+\end{analogy}
+
+\subsection{Three new statistics}
+
+We need a way to measure interaction across the whole network, not just at
+one layer. The idea: at each layer, the polar decomposition gives a rotation
+$U^{(l)}$, and from it we can extract a skew-symmetric generator $A^{(l)}$
+(the ``infinitesimal rotation''). When two generators at different layers
+\emph{fail to commute}---meaning $A^{(i)} A^{(j)} \neq A^{(j)} A^{(i)}$---
+the computation at those layers is genuinely interacting. This is the
+Lie-algebra version of curvature.
+
+\begin{keyidea}
+\textbf{Three statistics that operationalise the reasoning definition:}
+\begin{enumerate}[nosep]
+\item \textbf{Accumulated interaction} ($C_{\mathrm{acc}}$): sum up
+  $\|[A^{(i)}, A^{(j)}]\|$ over all layer pairs. This measures the
+  \emph{total} non-commutative structure in the network.
+\item \textbf{Effective capacity} ($C_{\mathrm{eff}}$): same sum, but each
+  term is weighted by $\sqrt{D_i \cdot D_j}$, the geometric mean of
+  dependency at those layers. This measures the non-commutative structure
+  that \emph{actually matters for the output}.
+\item \textbf{Commutator concentration} ($\mathrm{cconc}$): the fraction of
+  the total commutator mass that lives in the final three layer transitions.
+  This measures how \emph{spatially concentrated} the interaction is.
+\end{enumerate}
+The key ratio: $C_{\mathrm{eff}} / C_{\mathrm{acc}}$ tells you how much of
+the model's non-commutative structure is coupled to functional relevance.
+High $C_{\mathrm{acc}}$ with low $C_{\mathrm{eff}}$ means ``a lot of
+interaction is happening, but it doesn't matter for the output.''
+\end{keyidea}
+
+We also define a \textbf{correctness separation}:
+\[
+  \Delta C_{\mathrm{eff}}
+  = \mathbb{E}[C_{\mathrm{eff}} \mid \text{correct}]
+  - \mathbb{E}[C_{\mathrm{eff}} \mid \text{incorrect}].
+\]
+Positive $\Delta C_{\mathrm{eff}}$ means the model uses more functionally
+relevant interaction when it gets the answer right.
+
+\subsection{The experiment}
+
+We run 15~prompts (factual, arithmetic, reasoning, language understanding)
+through all three models from Chapter~6. For each prompt, we extract hidden
+states, compute capacity profiles, and check correctness against known
+answers.
+
+\begin{finding}
+\textbf{Scale increases raw interaction but not effective capacity.}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}lrrcrr@{}}
+\toprule
+\textbf{Model} & $C_{\mathrm{acc}}$ & $C_{\mathrm{eff}}$ &
+  cconc & Correct & $\Delta C_{\mathrm{eff}}$ \\
+\midrule
+Qwen2.5-7B       & 1,966 & 36.4 & 0.211 & 12/15 & $-$11.7 \\
+DeepSeek-R1-Distill-7B & 2,118 & 15.1 & 0.210 & 11/15 & $+$3.1 \\
+Qwen2.5-32B      & 9,778 & 14.6 & 0.096 & 12/15 & $-$18.8 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Qwen2.5-32B has ${\sim}5\times$ more accumulated interaction than Qwen-7B,
+but its effective capacity is \emph{lower}. The extra non-commutative
+structure lives in layers where dependency is low---geometrically active
+but functionally inert.
+\end{finding}
+
+\subsection{What the numbers tell us}
+
+\textbf{About scale.}
+The 32B model has vastly more raw non-commutative structure
+($C_{\mathrm{acc}} = 9{,}778$ vs.\ $1{,}966$)---this is expected when you go
+from 28 to 64 layers, creating far more layer pairs. But its effective
+capacity ($C_{\mathrm{eff}} = 14.6$) is actually lower than the 7B model's
+($36.4$). The extra interaction happens where the model does not need it.
+Scaling adds geometric capacity without necessarily improving its
+functional organisation.
+
+The commutator concentration tells the same story. The 7B models concentrate
+${\sim}21\%$ of commutator mass in the final three layers. The 32B model
+spreads it more evenly (${\sim}10\%$). This is consistent with finding~R4
+(curvature concentrates in final layers), but it shows the effect
+\emph{weakens} at larger scale.
+
+\textbf{About distillation.}
+DeepSeek-R1-Distill-Qwen-7B is the most interesting. It has the same
+architecture as Qwen-7B (28~layers, same dimension), similar
+$C_{\mathrm{acc}}$, and similar $\mathrm{cconc}$. But it is the
+\emph{only} model with positive $\Delta C_{\mathrm{eff}}$: it uses more
+effective capacity when it gets the answer right. Distillation from
+DeepSeek-R1 appears to have organised the non-commutative structure so
+that interaction aligns with the layers that matter for the output.
+
+\begin{keyidea}
+\textbf{More geometry is not better reasoning; better reasoning is
+better coupling between geometry and dependency.}
+
+This directly confirms the corrected Chapter~8 position: reasoning is not
+interaction alone, but the joint structure of interaction, propagation, and
+functional sensitivity. The new statistics make this concrete:
+\begin{itemize}[nosep]
+\item $C_{\mathrm{acc}}$ measures interaction alone.
+\item $C_{\mathrm{eff}}$ measures interaction $\times$ dependency coupling.
+\item $\mathrm{cconc}$ measures the spatial organisation of interaction.
+\item $\Delta C_{\mathrm{eff}}$ measures whether the coupling predicts
+  success.
+\end{itemize}
+Scale increases the first. Distillation appears to improve the second.
+\end{keyidea}
+
+\subsection{Connection to the control finding}
+
+Section~\ref{sec:metric-dominates} showed that metric control
+($P$~eigenvalue clamping) dominates dependency shaping.
+The scaling result complements this: the 32B model's low
+$C_{\mathrm{eff}}$ despite high $C_{\mathrm{acc}}$ implies that the
+metric channel (propagation stability) mediates the coupling between
+interaction and dependency. Where the metric factor allows interaction
+to propagate into output-relevant layers, effective capacity is high.
+Where it does not, interaction is present but functionally inert.
+
+\begin{pitfall}
+\textbf{Be careful with the scaling interpretation.}\quad
+You cannot conclude that ``the 32B model is worse.'' It gets 12/15 correct,
+same as the 7B. What you can say is: the 32B model has substantially more
+raw non-commutative structure, but that structure is less tightly coupled
+to dependency and less concentrated in the final layers. Scale increases
+geometric capacity, but not necessarily its functional organisation.
+
+Similarly, the distillation result comes from one model (DeepSeek-R1-Distill)
+compared to one base (Qwen-7B). Replication across additional model families
+is needed before claiming generality.
+\end{pitfall}
+
+\subsection{Hands-on: running the capacity experiment}
+
+The \texttt{layer\_time} library provides the capacity computation:
+
+\begin{lstlisting}[caption={Computing capacity profiles for a single model}]
+import layer_time_geometry as ltg
+from layer_time.capacity import compute_capacity_profile
+import numpy as np
+
+model = ltg.load_model("Qwen/Qwen2.5-7B")
+
+# Fit a metric from calibration texts
+cal_texts = [
+    "The quick brown fox jumps over the lazy dog.",
+    "Machine learning models learn patterns from data.",
+    "Water freezes at zero degrees Celsius.",
+]
+cal_states = [ltg.extract_hidden_states(
+    model.hf_model, model.tokenizer, t, model.device
+).cpu().numpy() for t in cal_texts]
+all_vecs = np.concatenate(
+    [H.reshape(-1, H.shape[-1]) for H in cal_states])
+metric = ltg.estimate_metric(all_vecs, n_components=256)
+
+# Analyse one prompt
+prompt = "The capital of France is"
+H = ltg.extract_hidden_states(
+    model.hf_model, model.tokenizer, prompt, model.device)
+H_tilde = ltg.whiten(H.cpu().numpy(), metric)
+
+# Dependency profile
+dep = ltg.compute_dependency_density(
+    model.hf_model, model.tokenizer, prompt,
+    metric, model.device)
+
+# Capacity profile
+cap = compute_capacity_profile(
+    H_tilde, D_layer=dep.D_layer, method="exact")
+
+print(f"C_acc  = {cap.C_acc:.2f}")
+print(f"C_eff  = {cap.C_eff:.2f}")
+print(f"cconc  = {cap.cconc_acc:.3f}")
+print(f"Generators: {len(cap.A_generators)}")
+\end{lstlisting}
+
+\begin{tryit}
+\textbf{Exercise 8.5 (Capacity across prompts):} Run the capacity
+computation on five prompts of different types (factual, arithmetic,
+reasoning). Does $C_{\mathrm{acc}}$ vary more than $C_{\mathrm{eff}}$
+across prompt types?
+
+\textbf{Exercise 8.6 (Visualising the coupling):} For a single prompt,
+plot the per-layer contributions to $C_{\mathrm{acc}}$
+(\texttt{cap.layer\_contributions}) alongside the dependency profile
+(\texttt{dep.D\_layer}). Where do the two curves overlap? Where do they
+diverge?  The overlap regions are where the model's interaction is
+functionally relevant.
+
+\textbf{Exercise 8.7 (Comparing two models):} If you have access to a
+second model, compute $C_{\mathrm{acc}}$, $C_{\mathrm{eff}}$, and
+$\mathrm{cconc}$ for both on the same prompt. Does the larger model
+always have higher $C_{\mathrm{acc}}$? Does it have higher
+$C_{\mathrm{eff}}$?
+\end{tryit}
+
+
 % ══════════════════════════════════════════════════════════════════════════════
 \chapter{Practical Applications: Diagnosing Model Failures}
 \label{chap:applications}
@@ -2094,6 +2313,13 @@ Here is what the framework establishes with cross-model empirical support:
 \item \textbf{Metric control dominates rotation control.} For
   intervening on model computation, modifying the stretching component
   is sufficient; changing rotation directions adds nothing measurable.
+
+\item \textbf{Scale increases interaction but not its functional
+  organisation.} A 32B model has ${\sim}5\times$ more accumulated
+  non-commutative structure than a 7B model, but its
+  dependency-weighted effective capacity is lower. Reasoning
+  distillation, by contrast, improves the coupling between interaction
+  and dependency (Section~\ref{sec:scaling-capacity}).
 \end{enumerate}
 
 \section{What this book did not cover}
@@ -2141,6 +2367,12 @@ These are genuine open questions---any of them could be a research project:
 \item \textbf{Better steering.} Given that metric control dominates,
   can we design a principled, gradient-free steering method that only
   modifies eigenvalues?
+
+\item \textbf{Is the distillation effect general?} Our scaling experiment
+  (Section~\ref{sec:scaling-capacity}) found that reasoning distillation
+  improves the coupling between interaction and dependency. Does this hold
+  for other distilled models? Can $\Delta C_{\mathrm{eff}}$ serve as a
+  diagnostic for distillation quality without running downstream benchmarks?
 \end{enumerate}
 
 \begin{tryit}

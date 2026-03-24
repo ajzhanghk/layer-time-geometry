@@ -1,0 +1,46 @@
+{
+  "models": {
+    "Qwen2.5-7B": {
+      "n_layers": 29,
+      "n_prompts": 15,
+      "n_correct": 12,
+      "mean_C_acc": 1965.7459021158709,
+      "std_C_acc": 1106.5555337249114,
+      "mean_C_eff": 36.40304098440425,
+      "std_C_eff": 16.163039568543244,
+      "mean_cconc": 0.210790073997963,
+      "std_cconc": 0.016035134778637675,
+      "mean_C_eff_correct": 34.06802057927198,
+      "mean_C_eff_incorrect": 45.74312260493334,
+      "delta_C_eff": -11.67510202566136
+    },
+    "DeepSeek-R1-Distill-Qwen-7B": {
+      "n_layers": 29,
+      "n_prompts": 15,
+      "n_correct": 11,
+      "mean_C_acc": 2118.3457173574106,
+      "std_C_acc": 1100.2983851312613,
+      "mean_C_eff": 15.134210306359929,
+      "std_C_eff": 7.6438297600969545,
+      "mean_cconc": 0.21007469101147672,
+      "std_cconc": 0.011571957504567862,
+      "mean_C_eff_correct": 15.958069908763342,
+      "mean_C_eff_incorrect": 12.868596399750551,
+      "delta_C_eff": 3.089473509012791
+    },
+    "Qwen2.5-32B": {
+      "n_layers": 65,
+      "n_prompts": 15,
+      "n_correct": 12,
+      "mean_C_acc": 9777.586728726314,
+      "std_C_acc": 5185.061372661292,
+      "mean_C_eff": 14.571758983833522,
+      "std_C_eff": 9.627169795441514,
+      "mean_cconc": 0.09572447700902843,
+      "std_cconc": 0.006712848570834865,
+      "mean_C_eff_correct": 10.808219660086458,
+      "mean_C_eff_incorrect": 29.625916278821776,
+      "delta_C_eff": -18.81769661873532
+    }
+  }
+}

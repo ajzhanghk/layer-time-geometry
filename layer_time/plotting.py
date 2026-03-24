@@ -4,6 +4,7 @@ import numpy as np
 from typing import Optional
 
 from layer_time_geometry import SampleGeometry, DirectionalRadial, SteeringDiagnostics
+from layer_time.capacity import CapacityProfile
 
 
 def _get_ax(ax):
@@ -423,3 +424,156 @@ def plot_attention_shift(gen_result, ax=None, cmap="viridis", **kwargs):
     ax.set_title("Attention Spread (temporal erank)")
     ax.figure.colorbar(im, ax=ax, label="Effective rank")
     return ax
+
+
+# ── Capacity / Scaling Plots ─────────────────────────────────────
+
+
+def plot_commutator_heatmap(
+    comm_norms: np.ndarray,
+    ax=None,
+    cmap: str = "inferno",
+    title: str = "Layer Commutator Structure",
+    **kwargs,
+):
+    """Heatmap of ||[A^(i), A^(j)]||_F across layer pairs.
+
+    Args:
+        comm_norms: (n, n) commutator norm matrix from capacity analysis.
+        ax: Matplotlib axes (created if None).
+        cmap: Colormap name.
+        title: Plot title.
+
+    Returns:
+        The matplotlib axes.
+    """
+    ax = _get_ax(ax)
+    im = ax.imshow(comm_norms, aspect="equal", cmap=cmap, origin="lower", **kwargs)
+    ax.set_xlabel("Layer transition j")
+    ax.set_ylabel("Layer transition i")
+    ax.set_title(title)
+    ax.figure.colorbar(im, ax=ax, label="||[A(i), A(j)]||_F")
+    return ax
+
+
+def plot_capacity_comparison(
+    capacities: dict[str, list[CapacityProfile]],
+    metric: str = "C_eff",
+    ax=None,
+    title: Optional[str] = None,
+    **kwargs,
+):
+    """Boxplot of a capacity metric across models.
+
+    Args:
+        capacities: Dict mapping model name to list of CapacityProfile.
+        metric: Which metric to plot ("C_acc", "C_eff", "cconc_acc").
+        ax: Matplotlib axes (created if None).
+        title: Plot title (defaults to metric name).
+
+    Returns:
+        The matplotlib axes.
+    """
+    ax = _get_ax(ax)
+    names = list(capacities.keys())
+    data = []
+    for name in names:
+        values = [getattr(cp, metric) for cp in capacities[name]]
+        data.append(values)
+
+    bp = ax.boxplot(data, labels=names, patch_artist=True, **kwargs)
+    colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+    for patch, color in zip(bp["boxes"], colors[: len(names)]):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+
+    ax.set_ylabel(metric)
+    ax.set_title(title or f"{metric} across models")
+    return ax
+
+
+def plot_correctness_separation(
+    C_eff_correct: np.ndarray,
+    C_eff_incorrect: np.ndarray,
+    ax=None,
+    title: str = "Correctness Separation",
+    **kwargs,
+):
+    """Overlapping histograms of C_eff for correct vs incorrect answers.
+
+    Args:
+        C_eff_correct: Array of C_eff values for correct answers.
+        C_eff_incorrect: Array of C_eff values for incorrect answers.
+        ax: Matplotlib axes (created if None).
+        title: Plot title.
+
+    Returns:
+        The matplotlib axes.
+    """
+    ax = _get_ax(ax)
+    bins = kwargs.pop("bins", 20)
+
+    ax.hist(C_eff_correct, bins=bins, alpha=0.6, label="correct",
+            color="tab:green", density=True)
+    ax.hist(C_eff_incorrect, bins=bins, alpha=0.6, label="incorrect",
+            color="tab:red", density=True)
+
+    delta = np.mean(C_eff_correct) - np.mean(C_eff_incorrect)
+    ax.axvline(np.mean(C_eff_correct), color="tab:green", linestyle="--", linewidth=1)
+    ax.axvline(np.mean(C_eff_incorrect), color="tab:red", linestyle="--", linewidth=1)
+
+    ax.set_xlabel("C_eff")
+    ax.set_ylabel("Density")
+    ax.set_title(f"{title}  (ΔC_eff = {delta:.4f})")
+    ax.legend()
+    return ax
+
+
+def plot_scaling_summary(
+    capacities: dict[str, list[CapacityProfile]],
+    labels: Optional[list[bool]] = None,
+    axes=None,
+    **kwargs,
+):
+    """Multi-panel scaling summary: C_acc, C_eff, concentration, commutator heatmaps.
+
+    Args:
+        capacities: Dict mapping model name to list of CapacityProfile.
+        labels: Optional bool list (correct/incorrect) for separation plot.
+        axes: Array of matplotlib axes (created if None).
+
+    Returns:
+        Array of axes.
+    """
+    import matplotlib.pyplot as plt
+
+    n_models = len(capacities)
+    n_panels = 3 + n_models  # C_acc, C_eff, cconc + one heatmap per model
+
+    if axes is None:
+        ncols = min(n_panels, 4)
+        nrows = (n_panels + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows))
+        axes = np.array(axes).flatten()
+
+    # Panel 1: C_acc boxplot
+    plot_capacity_comparison(capacities, metric="C_acc", ax=axes[0])
+
+    # Panel 2: C_eff boxplot
+    plot_capacity_comparison(capacities, metric="C_eff", ax=axes[1])
+
+    # Panel 3: cconc_acc boxplot
+    plot_capacity_comparison(capacities, metric="cconc_acc", ax=axes[2])
+
+    # Panels 4+: commutator heatmaps (averaged over prompts)
+    for idx, (name, caps) in enumerate(capacities.items()):
+        if idx + 3 < len(axes):
+            mean_comm = np.mean([cp.commutator_norms for cp in caps], axis=0)
+            plot_commutator_heatmap(mean_comm, ax=axes[idx + 3], title=f"Commutator: {name}")
+
+    # Hide unused axes
+    for i in range(n_panels, len(axes)):
+        axes[i].set_visible(False)
+
+    plt.tight_layout()
+    return axes

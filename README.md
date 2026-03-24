@@ -1,10 +1,20 @@
 # Layer-Time Geometry: How Language Models Process Information
 
-A Python library and companion book for understanding what happens inside transformer language models, using geometric tools from linear algebra.
+A Python library and companion book for measuring the internal computational structure of transformer language models.
 
 ## What is this?
 
-Transformer language models process text through a stack of layers. At every (layer, token) position, the model maintains a hidden-state vector. This library treats those hidden states as a **field on a 2D grid** (layers x tokens) and provides geometric tools to analyse how the model transforms information.
+Existing interpretability methods often explain model behavior locally -- tracing specific heads, neurons, or circuits. This framework serves a different purpose. It provides a **global measurement framework** for transformer computation: a way to summarize the hidden-state field across layers and tokens, compare prompts and models statistically, identify where interaction and dependency concentrate, and study how interventions propagate through the computation.
+
+It sits at a **mesoscopic layer** between black-box evaluation and fine-grained circuit tracing:
+
+| Level | Method | Question answered |
+|-------|--------|-------------------|
+| Black-box evaluation | Benchmarks, red-teaming | Did the model get it right? |
+| **Layer-time geometry** | **This library** | **Where and how does computation organize?** |
+| Circuit tracing | Activation patching, probing | Which head or neuron is responsible? |
+
+Use layer-time geometry to find the interesting regions and regimes; use tracing to zoom in mechanistically.
 
 **Three core ideas:**
 
@@ -76,7 +86,7 @@ print(f"Context influence: {diagnosis['context_influence']:.2f}")
 
 | API | Import | Audience | Description |
 |-----|--------|----------|-------------|
-| **Student API** | `import ltg` | Undergraduates, practitioners | One-line analysis, built-in plotting, diagnostic tools |
+| **Student API** | `import ltg` | Practitioners, data scientists | One-line analysis, built-in plotting, diagnostic tools |
 | **Research API** | `from layer_time import LayerTimeAnalyzer` | Researchers | Full control, calibration, generation tracking, steering diagnostics |
 
 Both APIs share the same backend (`layer_time_geometry.py`).
@@ -94,7 +104,7 @@ Nine Jupyter notebooks in `tutorials/`, one per chapter of the companion book. E
 | `ch5_curvature` | Non-commutativity | Curvature maps, the negative result (curvature != reasoning) |
 | `ch6_experiments` | Experimental design | Factorial DOE, ANOVA, five key findings |
 | `ch7_dependency` | Layer contribution | Gradient dependency, entropy, length confound |
-| `ch8_reasoning_memory_control` | Reasoning definition | Three-condition test, functional memory, metric vs rotation control |
+| `ch8_reasoning_memory_control` | Reasoning-like computation | Operational definitions, functional memory, metric vs rotation control |
 | `ch9_diagnosing_failures` | Applications | Context-ignoring, hallucination risk, steering targets |
 
 ## The Companion Book
@@ -139,7 +149,7 @@ layer-time-geometry/
     _compat.py               # Device detection
   tutorials/                 # 9 Jupyter notebooks
   tests/                     # Test suite
-  monograph_undergrad.pdf    # Companion book (104 pages, 3 appendices)
+  monograph_undergrad.pdf    # Companion book (105 pages, 3 appendices)
   monograph_undergrad.tex    # LaTeX source
   pyproject.toml             # Package configuration
 ```

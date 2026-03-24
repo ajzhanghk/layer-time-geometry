@@ -223,7 +223,7 @@ Every chapter follows the same pattern:
 \item \textbf{So what?}: why this matters for your work.
 \end{enumerate}
 
-Coloured boxes throughout the text serve specific purposes:
+Colored boxes throughout the text serve specific purposes:
 
 \begin{itemize}[nosep]
 \item {\color{Amber}\textbf{Why Should I Care?}} --- motivates the topic.
@@ -292,7 +292,7 @@ pip install layer-time[tutorials]
 \textbf{Notebook} & \textbf{Chapter} \\
 \midrule
 \texttt{ch1\_opening\_the\_black\_box.ipynb}  & Ch.~1: Opening the Black Box \\
-\texttt{ch2\_whitening.ipynb}                  & Ch.~2: Standardising the Representation \\
+\texttt{ch2\_whitening.ipynb}                  & Ch.~2: Standardizing the Representation \\
 \texttt{ch3\_kernels.ipynb}                    & Ch.~3: Measuring Similarity: Kernels \\
 \texttt{ch4\_polar\_decomposition.ipynb}       & Ch.~4: How Information Flows \\
 \texttt{ch5\_curvature.ipynb}                  & Ch.~5: Where the Action Is: Curvature \\
@@ -361,7 +361,7 @@ Think of a transformer like a factory assembly line. Raw materials (tokens)
 enter at one end. At each station (layer), workers (attention heads and
 feed-forward networks) modify the product. The hidden state at each
 station is like a detailed spec sheet describing the product's current
-state---its shape, colour, material, intended use. By the time the product
+state---its shape, color, material, intended use. By the time the product
 reaches the end of the line, the spec sheet contains everything needed to
 produce the final output.
 
@@ -412,9 +412,9 @@ layers and across tokens---reveals the model's internal computation.
 This book develops four main ideas, each building on the last:
 
 \begin{enumerate}
-\item \textbf{Standardise the vectors} (Chapter~\ref{chap:whitening}).
+\item \textbf{Standardize the vectors} (Chapter~\ref{chap:whitening}).
   Raw hidden states have correlated, differently-scaled dimensions.
-  We fix this with PCA-based whitening, like standardising variables
+  We fix this with PCA-based whitening, like standardizing variables
   before running a regression.
 
 \item \textbf{Measure how vectors change} (Chapters~\ref{chap:kernels}--\ref{chap:curvature}).
@@ -463,7 +463,7 @@ By the end of this book, you will be able to:
   what rotation and stretching mean.
 \item Measure curvature and identify where in the network non-trivial
   computation happens.
-\item Design and analyse factorial experiments on geometric quantities.
+\item Design and analyze factorial experiments on geometric quantities.
 \item Compute dependency profiles that show which layers matter most
   for the model's output.
 \item Diagnose specific failure modes (hallucination, instruction-ignoring,
@@ -508,14 +508,14 @@ lowest dependency entropy? Do the differences surprise you?
 
 
 % ══════════════════════════════════════════════════════════════════════════════
-\chapter{Standardising the Internal Representation}
+\chapter{Standardizing the Internal Representation}
 \label{chap:whitening}
 % ══════════════════════════════════════════════════════════════════════════════
 
 \notebook{ch2\_whitening.ipynb}
 
 \begin{whycare}
-If you compare hidden states at different layers without standardising them
+If you compare hidden states at different layers without standardizing them
 first, you are comparing apples and oranges. Whitening is to hidden-state
 analysis what z-scoring is to statistical analysis: it removes scale
 differences and correlations so that the geometry you measure is real, not an
@@ -549,7 +549,7 @@ of dimensions.
 
 The fix is a standard statistical tool: \textbf{whitening via PCA}.
 
-\textbf{Step 1: Centre.} Subtract the mean hidden state $\bar{H}$ computed
+\textbf{Step 1: Center.} Subtract the mean hidden state $\bar{H}$ computed
 across all layers and tokens for a given input.
 
 \textbf{Step 2: Compute the covariance.} The $p \times p$ covariance matrix
@@ -717,7 +717,7 @@ know several kernels:
 \begin{itemize}[nosep]
 \item \textbf{Dot product}: $K(a, b) = a^\top b$ --- the simplest kernel.
 \item \textbf{Cosine similarity}: $K(a, b) = \frac{a^\top b}{\|a\|\|b\|}$
-  --- normalised dot product.
+  --- normalized dot product.
 \item \textbf{RBF kernel}: $K(a, b) = \exp(-\|a - b\|^2 / 2\sigma^2)$
   --- similarity decays with distance.
 \end{itemize}
@@ -792,7 +792,7 @@ def layer_kernel(H_whitened):
     return K
 \end{lstlisting}
 
-\section{Hands-on: visualising the three phases}
+\section{Hands-on: visualizing the three phases}
 
 \begin{lstlisting}[caption={Visualising the layer kernel to see computational phases}]
 import ltg
@@ -933,7 +933,7 @@ amplifies some directions while crushing others---it is making a sharp
 ``decision''.
 
 The \textbf{effective rank} $\text{erank} = \exp(H(\hat\sigma))$, where
-$H$ is the entropy of the normalised eigenvalue distribution, measures how
+$H$ is the entropy of the normalized eigenvalue distribution, measures how
 many directions are actively used. Low effective rank means the layer
 concentrates its computation in a few directions.
 
@@ -970,7 +970,7 @@ def polar_decompose_layers(H_whitened):
 \section{Hands-on: exploring the polar decomposition with ltg}
 
 The \texttt{ltg} library computes the polar decomposition automatically. You
-can visualise it and inspect individual layers:
+can visualize it and inspect individual layers:
 
 \begin{lstlisting}[caption={Polar decomposition analysis with ltg}]
 import ltg
@@ -1010,7 +1010,7 @@ for l in range(result.n_layers - 1):
 \end{lstlisting}
 Which layers have more rotation? Which have more stretching? Is there a pattern?
 
-\textbf{Exercise 4.2 (Compare tasks):} Analyse an arithmetic prompt and a
+\textbf{Exercise 4.2 (Compare tasks):} Analyze an arithmetic prompt and a
 factual retrieval prompt. Compare their condition number profiles. Does the
 model make sharper ``decisions'' for one task type?
 \end{tryit}
@@ -1158,7 +1158,7 @@ print(f"  Final-3-layer share:  "
 \end{lstlisting}
 
 \begin{tryit}
-\textbf{Exercise 5.1 (Testing the negative result):} Analyse five prompts
+\textbf{Exercise 5.1 (Testing the negative result):} Analyze five prompts
 with increasing reasoning depth (1-step, 2-step, \ldots, 5-step). Plot
 their mean curvature. Does it increase? (Spoiler: it should not.)
 
@@ -1362,7 +1362,7 @@ add a fourth task (e.g., ``definition''). Run the ANOVA. Which metric shows
 the strongest task-type effect?
 
 \textbf{Exercise 6.2 (Paraphrase stability):} Take one prompt and create
-three paraphrases. Analyse all four versions. How similar are their curvature
+three paraphrases. Analyze all four versions. How similar are their curvature
 profiles? Compute the pairwise correlation.
 \end{tryit}
 
@@ -1455,7 +1455,7 @@ Useful summary statistics:
 \textbf{Length confound.} Total dependency $D_{\text{total}}$ is strongly
 correlated with sequence length ($r \approx 0.96$). Longer sequences have
 more hidden states for the gradient to flow through, mechanically increasing
-$D_{\text{total}}$. Always use \textbf{normalised} metrics (entropy,
+$D_{\text{total}}$. Always use \textbf{normalized} metrics (entropy,
 horizons, concentration ratios) when comparing prompts of different lengths.
 \end{pitfall}
 
@@ -1492,13 +1492,13 @@ for l in top3:
 \end{lstlisting}
 
 \begin{tryit}
-\textbf{Exercise 7.1 (Length confound):} Analyse prompts of lengths 10, 30,
+\textbf{Exercise 7.1 (Length confound):} Analyze prompts of lengths 10, 30,
 and 100 tokens. Plot $D_{\text{total}}$ vs.\ token count. Verify the
 correlation. Then plot dependency \emph{entropy} vs.\ token count---is the
 confound still present?
 
 \textbf{Exercise 7.2 (Comparing dependency and curvature):} For a single
-prompt, overlay the normalised curvature profile and the normalised
+prompt, overlay the normalized curvature profile and the normalized
 dependency profile on the same plot:
 \begin{lstlisting}
 import matplotlib.pyplot as plt
@@ -1889,9 +1889,9 @@ def risk_score(result):
 \end{lstlisting}
 \end{tryit}
 
-\section{Application 3: Steering model behaviour}
+\section{Application 3: Steering model behavior}
 
-\textbf{The problem.} You want to change the model's behaviour at inference
+\textbf{The problem.} You want to change the model's behavior at inference
 time without retraining.
 
 \textbf{The framework view.} Every steering method is a special case of:

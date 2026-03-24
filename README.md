@@ -99,7 +99,7 @@ Nine Jupyter notebooks in `tutorials/`, one per chapter of the companion book. E
 
 ## The Companion Book
 
-`monograph_undergrad.pdf` (105 pages) is a self-contained undergraduate-level companion that explains all concepts with intuition, analogies, and worked examples. No differential geometry or measure theory required -- just linear algebra and basic calculus.
+`monograph_undergrad.pdf` (104 pages) is a self-contained undergraduate-level companion that explains all concepts with intuition, analogies, and worked examples. No differential geometry or measure theory required -- just linear algebra and basic calculus.
 
 The book includes three appendices for readers who need background:
 
@@ -139,7 +139,7 @@ layer-time-geometry/
     _compat.py               # Device detection
   tutorials/                 # 9 Jupyter notebooks
   tests/                     # Test suite
-  monograph_undergrad.pdf    # Companion book (105 pages, 3 appendices)
+  monograph_undergrad.pdf    # Companion book (104 pages, 3 appendices)
   monograph_undergrad.tex    # LaTeX source
   pyproject.toml             # Package configuration
 ```

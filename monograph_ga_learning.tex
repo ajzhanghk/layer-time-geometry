@@ -422,7 +422,7 @@ Then compare heatmaps from an early layer ($l = 2$) and a late layer
 converges toward a prediction.
 
 \medskip
-\textbf{Sample output} (Qwen2.5-7B, prompt: ``The capital of France is''):
+\textbf{Sample output} (Qwen2.5-7B, prompt: ``The Eiffel Tower is a wrought iron lattice tower in Paris France''):
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch01_cosine_layers.pdf}
@@ -865,14 +865,16 @@ heatmap should be nearly diagonal.
 
 \medskip
 \textbf{Sample output} (Qwen2.5-7B):
-After whitening, the diagonal mean is $1.0000$ and the mean absolute
-off-diagonal entry drops to $0.000002$ --- confirming a valid orthonormal frame.
+The raw correlation matrix shows a mean $|\text{off-diagonal}| = 0.34$ ---
+heavy spurious correlations.  After whitening, this drops to $10^{-6}$
+with diagonal mean exactly $1.0$, confirming a valid orthonormal frame.
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch04_covariance.pdf}
-\captionof{figure}{Covariance structure before and after whitening.  The
-raw hidden states have heavy correlations; after whitening, the covariance
-is nearly identity.}
+\captionof{figure}{Correlation matrices before and after whitening (first
+100 dimensions).  Left: raw hidden states show pervasive off-diagonal
+structure.  Right: after whitening, the matrix is effectively identity ---
+establishing the orthonormal frame that GA requires.}
 \end{center}
 \end{tryit}
 
@@ -1577,13 +1579,13 @@ token-specific computation.
 \end{enumerate}
 
 \medskip
-\textbf{Sample output} (Qwen2.5-7B):
-Peak curvature at layer~16 (mean curvature $= 2.47$).
+\textbf{Sample output} (Qwen2.5-7B, 14-token prompt):
+Peak curvature at layer~26 (mean curvature $= 2.46$).
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch10_holonomy.pdf}
 \captionof{figure}{Left: holonomy scalar curvature map (layer $\times$ token).
-Right: mean curvature by layer, peaking at layer~16.}
+Right: mean curvature by layer, peaking at layer~26.}
 \end{center}
 \end{tryit}
 
@@ -1802,21 +1804,127 @@ Right: effective work $D_l \times \theta_l$ with top-3 layers highlighted.}
 This chapter applies everything you have learned to three practical
 problems: detecting when a model ignores context, diagnosing
 hallucinations, and steering model behavior via plane-specific
-interventions.  Each application uses the full GA toolkit: bivectors,
-holonomy, commutators, dependency.
+interventions.  Each application uses the full GA toolkit --- bivectors,
+holonomy, commutators, dependency --- and introduces new mathematical
+objects (the Cayley bivector, the directional--radial decomposition)
+that connect GA to modern interpretability research.
 \end{whycare}
 
+% ────────────────────────────────────────────────────────────────────
 \section{Application 1: Does the model use context?}
+\label{sec:context-detection}
+% ────────────────────────────────────────────────────────────────────
 
-\subsection{The method}
+\subsection{The problem}
 
-Compare the GA profile of a prompt with and without relevant context.
-If the model uses context, its geometric profile should change ---
-different curvature planes, different dominant rotation planes.
+Many language model applications provide the model with retrieved
+context --- documents, instructions, examples --- and expect the
+model to reason over that context.  A critical failure mode occurs
+when the model \emph{ignores} the provided context and generates
+from its parametric memory instead.  This is called \textbf{vibing}:
+the output looks plausible but is not grounded in the given material.
 
-\subsection{The GA diagnostic}
+The challenge has three parts:
+\begin{enumerate}[nosep]
+\item \textbf{Detection}: Is the model using context?
+\item \textbf{Diagnosis}: What semantic features are being modified?
+\item \textbf{Control}: Can we intervene to ensure context utilisation?
+\end{enumerate}
+GA addresses all three through a single object: the
+\textbf{Cayley bivector}.
 
-\begin{lstlisting}[caption={Context-ignoring detection via curvature planes}]
+\subsection{Prior and posterior representations}
+
+For query $x$ and retrieved context $c$, run the model twice:
+\begin{itemize}[nosep]
+\item \textbf{Prior state}: $u_\pi = \text{LLM}(x)$ \ (query alone)
+\item \textbf{Posterior state}: $v_q = \text{LLM}(x \oplus c)$
+  \ (query with context)
+\end{itemize}
+Both vectors are $\ell_2$-normalised to unit length, focusing on
+directional (semantic) information.  When the transformation
+$u_\pi \mapsto v_q$ is small, the model is vibing --- generating from
+its prior despite available context.
+
+\subsection{The Cayley bivector}
+
+The key mathematical object is the \textbf{Cayley bivector}, which
+encodes the rotation mapping $u_\pi$ to $v_q$ in linearised form:
+
+\begin{gabox}
+\textbf{Cayley bivector.}
+For normalised vectors $u_\pi, v_q \in \mathbb{R}^k$:
+\[
+  A(u_\pi, v_q) = \frac{v_q \op u_\pi}{1 + v_q^\top u_\pi}
+  = \frac{v_q u_\pi^\top - u_\pi v_q^\top}{1 + v_q^\top u_\pi}
+\]
+This is a skew-symmetric matrix --- a bivector in $\mathrm{Cl}(k, 0)$
+--- encoding both the \emph{magnitude} and \emph{direction} of context
+influence.
+\end{gabox}
+
+The \textbf{steering magnitude} is the Frobenius norm:
+\[
+  \tau = \|A\|_F = \tan(\theta/2), \qquad
+  \theta = \arccos(u_\pi^\top v_q)
+\]
+The map $\theta \mapsto \tan(\theta/2)$ sends
+$[0^\circ, 180^\circ)$ to $[0, \infty)$ and is approximately
+proportional to $\theta$ in the typical operating range
+($\theta \lesssim 30^\circ$).
+
+\begin{keyidea}
+\textbf{Three diagnostics from one object.}
+\begin{enumerate}[nosep]
+\item \textbf{Detection}: The magnitude
+  $\tau = \|A\|_F$ quantifies context influence.
+  Small $\tau$ $\Rightarrow$ vibing.
+\item \textbf{Diagnosis}: The \emph{direction} of $A$
+  specifies the semantic plane of rotation --- what kind of
+  information the context provides.
+\item \textbf{Control}: The rotation matrix $R$ recovered from
+  $A$ via the Cayley map can steer the model toward
+  context-following behaviour.
+\end{enumerate}
+\end{keyidea}
+
+\subsection{Connection to earlier concepts}
+
+The Cayley bivector connects directly to two constructions from
+earlier chapters.
+
+\paragraph{Connection to the geometric product (Chapter~\ref{chap:geometric-product}).}
+The Cayley bivector is a normalised version of the outer product
+$u_\pi \op v_q$.  Its scalar denominator $1 + u_\pi^\top v_q$ ensures
+$\|A\|_F = \tan(\theta/2)$ exactly.  The inner product
+$u_\pi \ip v_q$ appears in the denominator; the outer product
+$u_\pi \op v_q$ appears in the numerator.  The geometric product
+$u_\pi \gp v_q = u_\pi \ip v_q + u_\pi \op v_q$ thus contains both
+the detection signal (inner product) and the diagnosis signal (outer
+product).
+
+\paragraph{Connection to holonomy (Chapter~\ref{chap:holonomy}).}
+The steering magnitude $\tau$ is a single-plaquette analogue of the
+holonomy curvature $\Omega$.  Where $\Omega$ measures the failure of
+parallel transport around a plaquette in the $(l, t)$ grid, $\tau$
+measures the angular displacement between prior and posterior at a
+single point.
+
+\subsection{The detection rule}
+
+The detection algorithm is:
+\begin{enumerate}[nosep]
+\item Extract $u_\pi = \text{LLM}(x)$ and
+  $v_q = \text{LLM}(x \oplus c)$; $\ell_2$-normalise.
+\item Compute the Cayley bivector $A$ and its magnitude
+  $\tau = \|A\|_F$.
+\item If $\tau < \epsilon_{\text{vibe}}$ (default $0.05$),
+  flag as vibing.
+\item (Optional) If a learned rotation $R$ is available, apply
+  $R_\alpha = I + \alpha(R - I)$ to steer toward context-following.
+\end{enumerate}
+
+\begin{lstlisting}[caption={Context-ignoring detection via the Cayley bivector}]
 r_with = ltg_ga.analyse(prompt_with_context, model=model)
 r_without = ltg_ga.analyse(prompt_without_context, model=model)
 
@@ -1830,44 +1938,233 @@ hr2 = holonomy_rotor(r_without.H_whitened, l=peak, t=0)
 # Cosine similarity between curvature bivectors
 cos_sim = np.sum(hr1.bivector.matrix * hr2.bivector.matrix)
 cos_sim /= (hr1.bivector.norm * hr2.bivector.norm + 1e-12)
-# Low similarity => model IS using context
+# Low similarity => model IS using context (different curvature plane)
 \end{lstlisting}
 
 \begin{finding}
 \textbf{Curvature plane shift is a stronger indicator than magnitude
-change.}  Scalar curvature may change by only 10--20\%, but the
-\emph{direction} of curvature can shift substantially, indicating
-qualitatively different computation.
+change.}  Scalar curvature magnitude may change by only 10--20\%, but
+the \emph{direction} of curvature can shift substantially, indicating
+qualitatively different computation.  This is information that scalar
+summaries cannot provide --- only the bivector direction reveals it.
 \end{finding}
 
+% ────────────────────────────────────────────────────────────────────
 \section{Application 2: Hallucination signatures}
+\label{sec:hallucination}
+% ────────────────────────────────────────────────────────────────────
+
+\subsection{Two failure modes}
+
+Chain-of-thought prompting can fail in two geometrically distinct ways:
+
+\begin{enumerate}[nosep]
+\item \textbf{Aleatoric confusion}: The model generates multiple
+  reasoning paths that reach contradictory conclusions.  This is
+  visible as high variability in the bivector directions between
+  sampled chains.
+\item \textbf{Systematic hallucination (mode collapse)}: All paths
+  converge to the same incorrect conclusion with high confidence.
+  Entropy-based methods see low dispersion and miss this failure.
+  GA catches it through the \emph{plane structure} of the computation.
+\end{enumerate}
+
+\subsection{The bivector coherence diagnostic}
+
+Given $K$ reasoning chains with embeddings $v_1, \ldots, v_K$ (unit
+vectors), the \textbf{bivector coherence} is the RMS magnitude of
+all pairwise bivectors:
+\[
+  \mathcal{C} = \sqrt{\frac{1}{\binom{K}{2}}
+  \sum_{i < j} \|v_i \op v_j\|^2}
+  = \sqrt{\frac{1}{\binom{K}{2}}
+  \sum_{i < j} (1 - (v_i^\top v_j)^2)}
+\]
+Since $\|v_i \op v_j\|^2 = \sin^2\theta_{ij}$ for unit vectors,
+$\mathcal{C}$ is the RMS sine of all pairwise angles:
+\begin{itemize}[nosep]
+\item $\mathcal{C} \approx 0$: paths are nearly collinear
+  (consistent paraphrases).
+\item $\mathcal{C} \approx 1$: paths span a large angular volume
+  (genuine conflict).
+\end{itemize}
+
+\begin{gabox}
+\textbf{Why bivectors, not cosine similarity?}  Cosine similarity
+$v_i^\top v_j$ measures alignment; $\|v_i \op v_j\|$ measures the
+\emph{plane spanned} by the two paths.  When all pairs span
+\emph{similar} planes, the model is confused in a structured way
+(same error mode).  When they span \emph{different} planes, the model
+is diffusely uncertain.  The plane direction, accessible only through
+the bivector, distinguishes these two cases.
+\end{gabox}
+
+\subsection{Hallucination signatures in the GA profile}
 
 Hallucinations are associated with ``busy but useless'' layers: high
-geometric activity (curvature, rotation) but low dependency.  GA adds
-plane-level diagnostics:
+geometric activity (curvature, rotation) but low dependency.  GA
+provides plane-level diagnostics:
 
 \begin{itemize}[nosep]
 \item \textbf{Consistent curvature plane}: the model is ``confidently
   wrong'' --- it performs systematic but misdirected computation.
+  The holonomy bivector at high-activity layers points in a consistent
+  direction across tokens.
 \item \textbf{Random curvature planes}: the model is ``lost'' ---
-  curvature directions vary across tokens and layers without coherent
-  structure.
+  curvature directions vary across tokens without coherent structure.
+  The holonomy bivectors have low pairwise similarity.
 \end{itemize}
 
+\begin{finding}
+\textbf{Metric anisotropy complements rotational diagnostics.}
+The condition number $\kappa_G$ of the Gram matrix
+$G_{ij} = v_i^\top v_j$ measures spectral concentration.  When the
+model succeeds, reasoning paths are spectrally concentrated (low
+effective rank); when it fails, paths scatter more diffusely.  High
+$\kappa_G$ with low $\mathcal{C}$ is a \emph{warning sign}: the
+apparent consistency may be a metric artefact rather than genuine
+agreement.
+\end{finding}
+
+% ────────────────────────────────────────────────────────────────────
 \section{Application 3: Plane-specific steering}
+\label{sec:steering}
+% ────────────────────────────────────────────────────────────────────
+
+\subsection{The directional--radial decomposition}
+
+Every whitened hidden state admits a polar factorisation:
+\[
+  \widetilde{H}^{(l,t)} = r^{(l,t)} \, \hat{H}^{(l,t)},
+  \qquad \|\hat{H}^{(l,t)}\| = 1
+\]
+A steering perturbation $\delta$ decomposes into two orthogonal
+components:
+\begin{align*}
+  \delta_{\text{angular}} &= \delta - (\delta^\top \hat{H})\,\hat{H}
+  &&\text{(tangent to the sphere: changes direction)} \\
+  \delta_{\text{radial}} &= (\delta^\top \hat{H})\,\hat{H}
+  &&\text{(normal to the sphere: changes energy)}
+\end{align*}
+By Pythagoras:
+$\|\delta\|^2 = \|\delta_{\text{angular}}\|^2 +
+\|\delta_{\text{radial}}\|^2$.
+
+\begin{transformer}
+The angular component corresponds to \textbf{grade-2} (rotation)
+and the radial component to \textbf{grade-0} (scaling).  This
+decomposition is the single-vector analogue of the versor decomposition
+$T^{(l)} = \rotor{l}\metric{l}$ from Chapter~\ref{chap:versor}.
+\end{transformer}
+
+\subsection{Why the rotation plane matters}
+
+The versor decomposition tells us that inter-layer dynamics are
+\textbf{metric-dominated}: the symmetric factor $\metric{l}$
+contributes $\sim$94--97\% of the transition operator's Frobenius norm,
+while the rotation factor $\rotor{l}$ contributes only $\sim$3--6\%.
+
+This has a profound consequence for intervention design.  A steering
+perturbation $\delta^{(l)}$ applied at layer $l$ propagates to layer
+$l+1$ approximately as:
+\[
+  \delta_{\text{propagated}}^{(l+1)} \approx
+  T^{(l)} \, \delta^{(l)} = \rotor{l} \metric{l} \, \delta^{(l)}
+\]
+Because $\metric{l}$ dominates, the propagated perturbation is shaped
+primarily by the \emph{stretching directions} of $\metric{l}$, not
+by the rotation $\rotor{l}$.  A purely angular intervention at one
+layer acquires a radial component at the next:
+\[
+  \metric{l}\,\delta_{\text{angular}}^{(l)} =
+  \underbrace{(\metric{l}\delta_{\text{angular}})_{\text{angular}}}_{\text{survives}}
+  + \underbrace{(\metric{l}\delta_{\text{angular}})_{\text{radial}}}_{\text{generated by stretching}}
+\]
+
+\begin{pitfall}
+\textbf{Per-layer isometry does not guarantee end-to-end isometry.}
+A purely rotational intervention (e.g., Cayley steering) is exactly
+isometric at each layer.  But the model's metric-dominated dynamics
+convert angular perturbations into radial ones.  Over 28 layers,
+purely angular purity degrades substantially.  Dense addition, which
+appears geometrically crude, can achieve higher end-to-end angular
+purity because $|v^\top \hat{H}| \sim \mathcal{O}(1/\sqrt{k})$ in
+high dimensions, making the perturbation naturally tangential.
+\end{pitfall}
+
+\subsection{The steering recipe}
 
 \begin{keyidea}
+\textbf{Plane-specific steering.}
 Instead of modifying all directions at a target layer, intervene only
 in the \textbf{principal rotation plane}:
 \begin{enumerate}[nosep]
-\item Identify target layers by effective work $D_l \cdot \theta_l$.
-\item Extract the dominant bivector plane at each target layer.
-\item Modify the eigenvalues of $\metric{l}$ only in the 2D subspace
-  of that plane (amplify or suppress).
+\item Identify target layers by effective work $D_l \cdot \theta^{(l)}$
+  (Chapter~\ref{chap:dependency}).
+\item Extract the dominant bivector plane $\hat{B}^{(l)}$ at each
+  target layer.  Let $(u_1, u_2)$ be its spanning eigenvectors.
+\item Project $\metric{l}$ into the 2D subspace:
+  $\metric{l}_{\text{plane}} = U_2^\top \metric{l} U_2$ where
+  $U_2 = [u_1, u_2]$.
+\item Modify only the eigenvalues of $\metric{l}_{\text{plane}}$
+  (amplify or suppress), leaving all other directions unchanged.
 \end{enumerate}
 This is a rank-2 intervention in a $k$-dimensional space --- maximally
-targeted.
+targeted.  The intervention respects the model's own geometry: it acts
+in the plane where the model already performs its rotation.
 \end{keyidea}
+
+\begin{lstlisting}[caption={Identifying steering targets}]
+# Effective work per layer
+eff_work = result.dependency_profile * result.angles[:n]
+
+# Top-2 steering targets
+top_layers = np.argsort(eff_work)[-2:][::-1]
+
+for l in top_layers:
+    vd = rf.decompositions[l]
+    plane = vd.bivector.principal_planes(n_planes=1)[0]
+    print(f"Layer {l}: D={result.dependency_profile[l]:.4f}, "
+          f"theta={result.angles[l]:.4f}, "
+          f"plane_angle={plane['angle']:.4f}")
+    # plane['eigvecs'] gives the 2D subspace for intervention
+\end{lstlisting}
+
+\subsection{Comparison of steering methods}
+
+The following table summarises the geometric character of common
+steering approaches:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}\small
+\begin{tabular}{@{}L{3cm} L{3.5cm} L{4cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Steering type} & \textbf{GA interpretation} \\
+\midrule
+Dense addition & $\delta = \alpha\,v$ (constant) &
+  Naturally angular in high-$k$ \\
+Cayley/Rodrigues & $\delta = A\hat{H}$ (rotation) &
+  Exactly grade-2 per layer \\
+Sparse activation & $\delta = \lambda\,\Delta z$ &
+  Acts on monosemantic features \\
+Plane-specific & Modify $\metric{l}$ in 2D &
+  Targeted grade-0 in one plane \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{finding}
+\textbf{Rotation is the mechanism of semantic steering.}
+Across empirical studies, the central finding is that context
+influence in language models is a rotational phenomenon.  The Cayley
+bivector provides a unified representation: its magnitude detects
+vibing, its direction diagnoses the semantic category of context
+influence, and its associated rotation enables active intervention.
+Ablation studies show that random rotations catastrophically fail
+(0\% context-following), while learned rotations succeed (83\%),
+and scaling alone has no effect --- confirming that the antisymmetric
+(bivector) component carries the semantically meaningful signal.
+\end{finding}
 
 \begin{tryit}
 \textbf{Notebook: Chapter 13.}
@@ -1886,8 +2183,8 @@ diagnostic dimensions in a single view:
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch13_ga_summary.pdf}
-\captionof{figure}{4-panel GA summary for Qwen2.5-7B on ``The capital of
-France is''.  Top-left: rotor angles.  Top-right: plane similarity.
+\captionof{figure}{4-panel GA summary for Qwen2.5-7B on a 14-token prompt.
+Top-left: rotor angles.  Top-right: plane similarity.
 Bottom-left: curvature map.  Bottom-right: capacity contributions.}
 \end{center}
 \end{tryit}

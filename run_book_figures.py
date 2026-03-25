@@ -194,14 +194,22 @@ print(f"Loaded {model.name}: {model.n_layers} layers, dim={model.hidden_dim}")
 # ── Chapter 1: Cosine similarity heatmaps ─────────────────────
 section("Chapter 1: Cosine Similarity Across Layers")
 
+# Use a longer prompt so the token-token structure is visible
+import layer_time_geometry as core
+ch1_prompt = "The Eiffel Tower is a wrought iron lattice tower in Paris France"
+H_raw_ch1 = core.extract_hidden_states(model.hf_model, model.tokenizer,
+                                        ch1_prompt, model.device)
+H_ch1 = H_raw_ch1[1:].cpu().numpy()  # raw (unwhitened) to show convergence
+L_ch1, T_ch1, _ = H_ch1.shape
+print(f"Ch1 grid: {L_ch1} layers x {T_ch1} tokens")
+
+# Also run the standard analysis for later chapters
 result = ltg_ga.analyse("The capital of France is", model=model)
-H = result.H_whitened
-L, T, k = H.shape
-print(f"Grid: {L} layers x {T} tokens x {k} dims")
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-for ax, layer_idx, title in zip(axes, [1, L-2], ['Early (Layer 2)', f'Late (Layer {L-1})']):
-    H_l = H[layer_idx]
+for ax, layer_idx, title in zip(axes, [1, L_ch1-2],
+                                ['Early (Layer 2)', f'Late (Layer {L_ch1-1})']):
+    H_l = H_ch1[layer_idx]
     norms = np.linalg.norm(H_l, axis=1, keepdims=True)
     H_norm = H_l / (norms + 1e-12)
     cos_sim = H_norm @ H_norm.T
@@ -223,33 +231,47 @@ H_raw = core.extract_hidden_states(model.hf_model, model.tokenizer,
 H_np = H_raw[1:].cpu().numpy()
 L_r, T_r, p = H_np.shape
 H_flat_raw = H_np.reshape(-1, p)
-cov_raw = np.cov(H_flat_raw[:, :50].T)  # first 50 dims for visibility
 
 metric = core.estimate_metric(H_flat_raw, n_components=min(256, H_flat_raw.shape[0]-1))
 H_w = core.whiten(H_np, metric)
 k_w = H_w.shape[-1]
 H_flat_w = H_w.reshape(-1, k_w)
-cov_white = np.cov(H_flat_w[:, :min(50, k_w)].T)
+
+# Correlation matrices (normalized covariance) — more informative than raw covariance
+n_show = min(100, p, k_w)  # show first 100 dims
+cov_raw = np.cov(H_flat_raw[:, :n_show].T)
+std_raw = np.sqrt(np.diag(cov_raw)) + 1e-12
+corr_raw = cov_raw / np.outer(std_raw, std_raw)
+
+cov_white = np.cov(H_flat_w[:, :min(n_show, k_w)].T)
+std_white = np.sqrt(np.diag(cov_white)) + 1e-12
+corr_white = cov_white / np.outer(std_white, std_white)
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-im0 = axes[0].imshow(np.abs(cov_raw), cmap='YlOrRd', aspect='equal')
-axes[0].set_title('Before Whitening (|covariance|)', fontsize=11)
+
+im0 = axes[0].imshow(corr_raw, cmap='RdBu_r', vmin=-1, vmax=1, aspect='equal')
+axes[0].set_title('Before Whitening (correlation)', fontsize=11)
 axes[0].set_xlabel('Dimension')
 axes[0].set_ylabel('Dimension')
 plt.colorbar(im0, ax=axes[0], shrink=0.8)
 
-im1 = axes[1].imshow(np.abs(cov_white), cmap='YlOrRd', aspect='equal', vmax=np.abs(cov_raw).max()*0.1)
-axes[1].set_title('After Whitening (|covariance|)', fontsize=11)
+im1 = axes[1].imshow(corr_white, cmap='RdBu_r', vmin=-1, vmax=1, aspect='equal')
+axes[1].set_title('After Whitening (correlation)', fontsize=11)
 axes[1].set_xlabel('Dimension')
 axes[1].set_ylabel('Dimension')
 plt.colorbar(im1, ax=axes[1], shrink=0.8)
+
 plt.tight_layout()
 savefig('ch04_covariance.pdf')
 
-diag_mean = np.diag(np.cov(H_flat_w.T)).mean()
-off_diag = np.cov(H_flat_w.T) - np.diag(np.diag(np.cov(H_flat_w.T)))
+# Summary statistics
+off_mask = ~np.eye(corr_raw.shape[0], dtype=bool)
+raw_offdiag = np.abs(corr_raw[off_mask]).mean()
+white_offdiag = np.abs(corr_white[off_mask]).mean()
+diag_mean = np.diag(cov_white).mean()
+print(f"Raw mean |off-diagonal correlation|: {raw_offdiag:.4f}")
+print(f"Whitened mean |off-diagonal correlation|: {white_offdiag:.6f}")
 print(f"Whitened covariance diagonal mean: {diag_mean:.4f}")
-print(f"Whitened |off-diagonal| mean: {np.abs(off_diag).mean():.6f}")
 
 # ── Chapter 6: Rotor field + grade profile ────────────────────
 section("Chapter 6: Rotor Field and Grade Profile")
@@ -389,7 +411,10 @@ section("Chapter 10: Holonomy")
 
 from layer_time_ga.curvature import holonomy_scalar_map, holonomy_rotor
 
-holo_map = holonomy_scalar_map(result.H_whitened)
+# Use a longer prompt so the layer x token heatmap is informative
+ch10_prompt = "The Eiffel Tower is a wrought iron lattice tower in Paris France"
+result_ch10 = ltg_ga.analyse(ch10_prompt, model=model)
+holo_map = holonomy_scalar_map(result_ch10.H_whitened)
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 im = axes[0].imshow(holo_map, aspect='auto', cmap='YlOrRd', origin='lower')
@@ -478,7 +503,8 @@ else:
 
 # ── GA Summary plot ───────────────────────────────────────────
 section("GA Summary Plot")
-result.plot_ga_summary(save_path=os.path.join(FIGDIR, 'ch13_ga_summary.pdf'))
+# Use the longer prompt for richer curvature map in the summary
+result_ch10.plot_ga_summary(save_path=os.path.join(FIGDIR, 'ch13_ga_summary.pdf'))
 print("  Saved ch13_ga_summary.pdf")
 
 print(f"\n{'='*60}")

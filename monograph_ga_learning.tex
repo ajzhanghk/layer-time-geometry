@@ -62,6 +62,9 @@
 
 % ── Memoir styles ─────────────────────────────────────────────────────────────
 \chapterstyle{veelo}
+% Reduce chapter/appendix number size and pull left to avoid overrunning margin
+\renewcommand{\chapnumfont}{\fontsize{38}{42}\selectfont\sffamily\color{Navy!40}}
+\renewcommand{\printchapternum}{\chapnumfont\thechapter\kern10pt}
 \renewcommand{\partnamefont}{\huge\sffamily\color{Navy}}
 \renewcommand{\partnumfont}{\huge\sffamily\color{Navy}}
 \renewcommand{\parttitlefont}{\Huge\bfseries\sffamily\color{Navy}}
@@ -173,7 +176,11 @@
   {\large\sffamily\color{DGray} Aijun Zhang}\\[40pt]
   {\normalsize\itshape\color{DGray}
    A self-guided introduction to Geometric Algebra\\
-   with language models as your laboratory}
+   with language models as your laboratory}\\[30pt]
+  {\small\sffamily\color{DGray} Version: March 25, 2026}\\[20pt]
+  {\small\sffamily\color{Blue}
+   \href{https://github.com/asudjianto-xml/GA-Transformer-Geometry}%
+   {github.com/asudjianto-xml/GA-Transformer-Geometry}}
 \end{center}
 \end{titlingpage}
 \clearpage
@@ -185,7 +192,7 @@
 \subsection*{What this book is}
 
 This is a book about Geometric Algebra.  It teaches you a powerful
-mathematical framework --- the Clifford algebra $\mathrm{Cl}(k, 0)$ ---
+mathematical framework --- Geometric Algebra (technically the Clifford algebra $\mathrm{Cl}(k,0)$, a notation we unpack in Chapter~4) ---
 through a concrete, fascinating application: understanding how large
 language models process information internally.
 
@@ -200,7 +207,7 @@ abstract algebraic concepts become visible, measurable, and surprising.
 Geometric Algebra was born in physics and has thrived in computer graphics,
 robotics, and signal processing.  But transformers offer something these
 fields do not: a high-dimensional space ($k = 256$ after whitening) where
-\emph{every} GA concept --- bivectors, rotors, holonomy, commutators ---
+\emph{every} GA concept --- bivectors (oriented planes), rotors (rotations), holonomy (curvature from composing rotations around a loop), commutators (measuring how much two operations depend on order) ---
 appears naturally in the data.  In 3D physics, a bivector is just a
 dressed-up cross product.  In $\mathbb{R}^{256}$, bivectors have
 $32{,}640$ independent components, multiple principal planes, and rich
@@ -244,6 +251,32 @@ Each chapter follows the same pattern:
 The chapters build sequentially: each depends on the previous.  Read them
 in order the first time.  After that, use the chapters as reference.
 
+\subsection*{Three kinds of statement}
+
+This book mixes mathematics, computation, and empirical observation.  To
+keep the distinction clear, we use three categories throughout:
+
+\begin{itemize}[nosep]
+\item \textbf{GA identity} (exact).  A mathematical fact that holds in any
+  Clifford algebra $\mathrm{Cl}(k, 0)$.  Example: the geometric product
+  decomposes as $ab = a \ip b + a \op b$.  These do not depend on any
+  model or dataset.
+\item \textbf{Computational construction} (defined).  A procedure we
+  define and apply to transformer data: whitening, the layer transition
+  operator, versor decomposition, dependency density, etc.  These are
+  methodological choices, not theorems.
+\item \textbf{Empirical observation} (observed).  A pattern we find in
+  a specific model under a specific setup --- for instance, that grade-0
+  dominates grade-2 in late layers of Qwen2.5-7B.  These observations
+  motivate the narrative, but they are not guaranteed to hold for all
+  models, prompts, or whitening dimensions.
+\end{itemize}
+
+We mark empirical observations with phrases like ``in Qwen2.5-7B'' or
+``in our experiments'' to distinguish them from exact GA identities.
+When a \emph{Finding} box reports a pattern, it is an empirical
+observation unless stated otherwise.
+
 \subsection*{The companion notebooks}
 
 Each chapter has a companion Jupyter notebook in
@@ -254,9 +287,44 @@ build intuition.
 
 \subsection*{The software}
 
-All code uses the \texttt{layer\_time\_ga} Python package, which wraps
-a standard PyTorch/NumPy backend with GA semantics.  The student API
-\texttt{ltg\_ga} provides a simple interface:
+All code in this book uses the \texttt{ga-transformer-geometry} package,
+available on GitHub:
+
+\begin{center}
+\url{https://github.com/asudjianto-xml/GA-Transformer-Geometry}
+\end{center}
+
+\noindent Install from PyPI:
+\begin{lstlisting}
+pip install ga-transformer-geometry
+\end{lstlisting}
+
+\noindent Or install from source:
+\begin{lstlisting}
+git clone https://github.com/asudjianto-xml/GA-Transformer-Geometry.git
+cd GA-Transformer-Geometry
+pip install -e .
+\end{lstlisting}
+
+\noindent For the companion notebooks, install with tutorial dependencies:
+\begin{lstlisting}
+pip install -e ".[tutorials]"
+\end{lstlisting}
+
+The package provides two interfaces:
+
+\begin{itemize}[nosep]
+\item \textbf{\texttt{layer\_time\_ga}} --- the GA library with 34 public
+  functions and classes across five modules: \texttt{algebra} (bivectors,
+  rotors, geometric product, Rodrigues, Cayley, Binet--Cauchy),
+  \texttt{decomposition} (versor decomposition, rotor fields),
+  \texttt{curvature} (holonomy, commutators, nonseparability),
+  \texttt{capacity} (GA capacity profiles), and \texttt{diagnostics}
+  (coherence, steering).  Every code block in the book calls this library.
+
+\item \textbf{\texttt{ltg\_ga}} --- a student API that wraps the full
+  pipeline into three lines:
+\end{itemize}
 
 \begin{lstlisting}[caption={Three lines to GA}]
 import ltg_ga
@@ -277,6 +345,68 @@ result.summary()
 \mainmatter
 % ══════════════════════════════════════════════════════════════════════════════
 
+
+\chapter*{The Pipeline at a Glance}
+\addcontentsline{toc}{chapter}{The Pipeline at a Glance}
+
+Before diving into the algebra, here is a one-page map of how raw
+transformer data becomes geometric objects.  You do not need to
+understand every step now --- each is developed in the corresponding
+chapter.  Refer back to this page whenever you need orientation.
+
+\begin{enumerate}
+\item \textbf{Hidden states} $H^{(l,t)} \in \mathbb{R}^p$
+  (Chapter~\ref{chap:vectors}).  \\
+  A transformer with $L$ layers and $T$ input tokens produces a
+  $(L \times T)$ grid of hidden-state vectors, each in the model's
+  native dimension $p$ (e.g., $p = 3584$ for Qwen2.5-7B).
+
+\item \textbf{Whitening} $\widetilde{H}^{(l,t)} \in \mathbb{R}^k$
+  (Chapter~\ref{chap:frames}).  \\
+  PCA-based whitening projects from $\mathbb{R}^p$ to $\mathbb{R}^k$
+  (typically $k = 256$, retaining $>99\%$ of variance) and ensures
+  the covariance is the identity matrix $I_k$.
+  This establishes the orthonormal frame required for $\mathrm{Cl}(k, 0)$.
+
+\item \textbf{Layer transition operator} $T^{(l)} \in \mathbb{R}^{r \times r}$
+  (Chapter~\ref{chap:versor}).  \\
+  The least-squares map from whitened states at layer~$l$ to layer~$l+1$,
+  restricted to the joint token subspace (rank $r \le 2T$).
+
+\item \textbf{Versor decomposition} $T^{(l)} = \rotor{l}\,\metric{l}$
+  (Chapter~\ref{chap:versor}).  \\
+  Polar decomposition splits each transition into a rotor
+  $\rotor{l}$, an $r \times r$ rotation matrix (orthogonal with determinant $+1$, written $\mathrm{SO}(r)$ in group notation) (\emph{grade-2}: rotation), and a
+  symmetric factor $\metric{l}$ (\emph{grade-0}: stretching).
+
+\item \textbf{Bivector field} $\{\bivec{l}\}$
+  (Chapter~\ref{chap:planes}).  \\
+  The skew-symmetric generator $\bivec{l} = \log(\rotor{l})$ (the matrix
+  logarithm, which inverts the matrix exponential; developed in
+  Chapter~5) is a bivector encoding the rotation planes and angles at
+  each layer.
+
+\item \textbf{Holonomy} $\Omega^{(l,t)}$
+  (Chapter~\ref{chap:holonomy}).  \\
+  Compose rotors around a rectangular cell (called a \emph{plaquette} in physics) $(l, t)$ on the grid.  If the
+  result is not the identity, the grid is curved at that point.
+  The holonomy bivector gives the direction of curvature.
+
+\item \textbf{Dependency density} $D_l$
+  (Chapter~\ref{chap:dependency}).  \\
+  The gradient $\|\partial s / \partial \widetilde{H}^{(l)}\|$
+  measures how much the model's output score depends on each layer.
+  This is a \emph{computational construction}, not a GA identity.
+\end{enumerate}
+
+\vspace{0.5em}
+\noindent
+\textbf{The key insight}: steps 1--3 are standard linear algebra.
+Steps 4--6 are where GA enters: the same matrices acquire
+\emph{geometric meaning} --- planes of rotation, angles, curvature
+direction --- that is invisible in the matrix representation alone.
+
+\clearpage
 
 % ╔════════════════════════════════════════════════════════════════════════════╗
 \part{Vectors and Products}
@@ -365,6 +495,158 @@ layers.  At each step, the hidden state $H(l, t)$ changes --- rotated,
 stretched, mixed with other tokens.  The model's ``thinking'' is encoded
 in how these vectors change across the grid.
 \end{transformer}
+
+% ── 1.2.1  Why a hidden state exists for each token ──────────────
+\subsection{Why a hidden state exists for each token}
+\label{sec:why-per-token}
+
+At first glance, there is a tension in how transformers work.
+On one hand, the model processes all tokens jointly: at each layer,
+every token attends to every other token, mixing information across
+the entire sequence.  On the other hand, we describe the model as
+having a hidden state $H(l,t)$ for each token~$t$ at each layer~$l$.
+How can both be true?
+
+\paragraph{The key fact.}
+A transformer layer takes as input a matrix of token representations
+$H^{(l)} \in \mathbb{R}^{T \times p}$ and produces another matrix of the
+same shape, $H^{(l+1)} \in \mathbb{R}^{T \times p}$.  Each row
+corresponds to a token position~$t$.  The crucial point is:
+
+\begin{keyidea}
+\textbf{The output still has one vector per token position, even though
+each vector is computed using all tokens.}
+\end{keyidea}
+
+\paragraph{How mixing and indexing coexist.}
+In the attention mechanism, the update for token~$t$ can be written as:
+\[
+  H^{(l+1)}(t)
+  \;=\;
+  \sum_{s=1}^{T} \alpha_{t,s}^{(l)} \; V^{(l)}(s),
+\]
+where $V^{(l)}(s)$ is a \emph{value vector} derived from token~$s$, and
+$\alpha_{t,s}^{(l)}$ are attention weights that depend on the similarity
+between tokens.  This equation shows two things simultaneously:
+\begin{enumerate}
+  \item \textbf{Global mixing.}
+    Each updated vector $H^{(l+1)}(t)$ depends on all tokens
+    $s = 1,\dots,T$.
+  \item \textbf{Local anchoring.}
+    The result is still indexed by~$t$.  There is one output vector
+    per token position.
+\end{enumerate}
+
+\paragraph{Interpretation.}
+We should not think of $H(l,t)$ as ``the representation of token~$t$
+alone.''  Instead:
+
+\begin{analogy}
+$H(l,t)$ is the representation \emph{at position~$t$}, after
+integrating information from the entire sequence up to layer~$l$.
+Each position acts as a \textbf{carrier of contextual information}:
+early layers carry mostly local, token-specific information; later
+layers carry highly contextualized representations that incorporate
+global structure.
+\end{analogy}
+
+\paragraph{Why the grid structure is valid.}
+Because each layer outputs a vector for every token position, we can
+organise the hidden states as a two-dimensional grid
+$H(l,t)$, $l = 1,\dots,L$, $t = 1,\dots,T$.
+Moving across~$t$ (same layer) compares different contextualised
+positions.  Moving across~$l$ (same token) tracks how a position's
+representation evolves.  This indexing remains well-defined despite
+attention mixing, because the model preserves \textbf{positional
+structure} throughout computation.
+
+\paragraph{What this means for our analysis.}
+When we study the geometry of hidden states, we are not analysing
+isolated tokens.  We are analysing a \emph{field of contextualised
+vectors, indexed by layer and position}.  This perspective is what
+allows us to treat the transformer as a geometric object~--- a space
+where vectors evolve, interact, and form structure across both depth
+(layers) and context (tokens).
+
+% ── Figure: Attention mixes globally, outputs locally ─────────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  vecbox/.style={draw=Navy, fill=LBlue, minimum width=0.75cm,
+                 minimum height=0.55cm, font=\footnotesize,
+                 rounded corners=2pt},
+  outbox/.style={draw=DGreen, fill=LGreen, minimum width=0.75cm,
+                 minimum height=0.55cm, font=\footnotesize,
+                 rounded corners=2pt},
+  wt/.style={font=\tiny, Blue},
+  brace/.style={decorate, decoration={brace, amplitude=5pt, raise=2pt}},
+]
+
+% ── Layer l inputs ──
+\foreach \i/\tok in {1/The, 2/capital, 3/of, 4/France, 5/is, 6/{.}} {
+  \node[vecbox] (in\i) at (1.3*\i, 0)
+    {\strut$H^{(l)}_{\i}$};
+}
+\node[below=4pt of in1, font=\tiny\itshape, DGray] {The};
+\node[below=4pt of in3, font=\tiny\itshape, DGray] {of};
+\node[below=4pt of in6, font=\tiny\itshape, DGray] {.};
+
+% ── Layer l+1 outputs ──
+\foreach \i in {1,...,6} {
+  \node[outbox] (out\i) at (1.3*\i, -3.2)
+    {\strut$H^{(l\!+\!1)}_{\i}$};
+}
+
+% ── Highlight token t=4 ("France") ──
+\node[draw=DRed, line width=1.2pt, fill=LRed,
+      minimum width=0.75cm, minimum height=0.55cm,
+      font=\footnotesize, rounded corners=2pt]
+  (out4h) at (1.3*4, -3.2) {\strut$H^{(l\!+\!1)}_{4}$};
+\node[below=4pt of out4h, font=\tiny\itshape, DRed] {France};
+
+% ── Arrows: all inputs feed into token 4 ──
+\foreach \i/\w in {1/0.03, 2/0.08, 3/0.05, 4/0.52, 5/0.22, 6/0.10} {
+  \draw[->, Blue!70, line width={0.3pt + \w*2.5pt}]
+    (in\i.south) -- (out4h.north)
+    node[pos=0.5, wt, right=1pt] {$\alpha_{4,\i}$};
+}
+
+% ── Faint arrows: token 2 as second example ──
+\foreach \i in {1,...,6} {
+  \draw[->, Navy!15, line width=0.3pt]
+    (in\i.south) -- (out2.north);
+}
+
+% ── Annotation: attention equation ──
+\node[right=12pt of out6, font=\small, text width=3.8cm, align=left]
+  (eq) {$\displaystyle H^{(l+1)}(t)
+    = \sum_{s} \alpha_{t,s}\, V^{(l)}(s)$};
+
+% ── Braces ──
+\draw[brace, Navy] (in1.north west) -- (in6.north east)
+  node[midway, above=8pt, font=\small\itshape, Navy]
+  {Layer $l$: all tokens};
+\draw[brace, DGreen] (out6.south east) -- (out1.south west)
+  node[midway, below=12pt, font=\small\itshape, DGreen]
+  {Layer $l\!+\!1$: still one vector per position};
+\end{tikzpicture}
+
+\caption{\textbf{Attention mixes globally but outputs remain
+per-token.}  Each output vector $H^{(l+1)}(t)$ is a weighted
+combination of all input vectors from the previous layer.  Thick
+arrows highlight how token~4 (``France'') aggregates information
+from every position with weights $\alpha_{4,s}$.  Faint arrows
+show that token~2 receives its own, different mixture.  Although
+information is globally mixed, the model still produces one vector
+per token position~--- preserving the grid structure $H(l,t)$.}
+\label{fig:attention-mixing}
+\end{figure}
+
+The diagram makes clear that mixing does not destroy positional
+indexing: each position aggregates information from all others, but
+remains a distinct carrier of that information.
+
 
 \section{The inner product in hidden-state space}
 
@@ -506,6 +788,106 @@ faces (clockwise or counterclockwise).  The geometric product gives
 you \emph{both}: shadow and parallelogram, in one object.
 \end{analogy}
 
+% ── Figure: Geometric product = scalar + plane ────────────────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  vec/.style={->, line width=1.4pt},
+  proj/.style={->, line width=1pt, densely dashed},
+  lbl/.style={font=\small},
+  para/.style={fill=Purple!12, draw=Purple!50, line width=0.6pt},
+]
+
+% ── Panel A: Two vectors ──
+\begin{scope}[shift={(-5.5,0)}]
+  \draw[vec, Navy] (0,0) -- (2.8,0)
+    node[right, lbl, Navy] {$a$};
+  \draw[vec, Blue] (0,0) -- (1.6,2.2)
+    node[above right, lbl, Blue] {$b$};
+  \draw[Teal, thick] (0.7,0) arc[start angle=0, end angle=54, radius=0.7]
+    node[midway, right=2pt, font=\small, Teal] {$\theta$};
+  \node[below=14pt, font=\small\bfseries, Navy] at (1.2, -0.2)
+    {(a)\; Two vectors};
+\end{scope}
+
+% ── Panel B: Scalar part (projection) ──
+\begin{scope}[shift={(0,0)}]
+  \draw[vec, Navy] (0,0) -- (2.8,0)
+    node[right, lbl, Navy] {$a$};
+  \draw[vec, Blue!40] (0,0) -- (1.6,2.2);
+  % Projection
+  \draw[proj, DGreen] (0,0) -- (1.6,0)
+    node[midway, below=3pt, font=\small, DGreen] {$a \ip b$};
+  % Drop line
+  \draw[DGreen!50, thin, densely dotted] (1.6,2.2) -- (1.6,0);
+  \node[below=14pt, font=\small\bfseries, DGreen] at (1.2, -0.2)
+    {(b)\; Scalar part: projection};
+  \node[below=28pt, font=\footnotesize, DGray] at (1.2, -0.2)
+    {$a \ip b = \|a\|\,\|b\|\cos\theta$};
+\end{scope}
+
+% ── Panel C: Bivector part (parallelogram) ──
+\begin{scope}[shift={(5.8,0)}]
+  \coordinate (O) at (0,0);
+  \coordinate (A) at (2.8,0);
+  \coordinate (B) at (1.6,2.2);
+  \coordinate (AB) at (4.4,2.2);
+  % Parallelogram
+  \draw[para] (O) -- (A) -- (AB) -- (B) -- cycle;
+  % Vectors
+  \draw[vec, Navy] (O) -- (A) node[right, lbl, Navy] {$a$};
+  \draw[vec, Blue] (O) -- (B) node[above right, lbl, Blue] {$b$};
+  % Orientation arrow (curved)
+  \draw[->, Purple, thick] (1.8,0.6) arc[start angle=-20, end angle=70,
+    radius=0.5] node[above left=-1pt, font=\footnotesize, Purple]
+    {orient.};
+  \node[below=14pt, font=\small\bfseries, Purple] at (1.8, -0.2)
+    {(c)\; Bivector part: oriented plane};
+  \node[below=28pt, font=\footnotesize, DGray] at (1.8, -0.2)
+    {$\|a \op b\| = \|a\|\,\|b\|\sin\theta$};
+\end{scope}
+
+\end{tikzpicture}
+
+\medskip
+\begin{tikzpicture}[
+  lbl/.style={font=\small},
+]
+% ── Unified equation ──
+\node[draw=Navy, rounded corners=4pt, fill=LBlue, inner sep=8pt,
+      font=\normalsize] (eq) {%
+  $\underset{\textcolor{DGray}{\text{\footnotesize full relationship}}}{%
+    a\,b}
+  \;=\;
+  \underset{\textcolor{DGreen}{\text{\footnotesize alignment}}}{%
+    a \cdot b}
+  \;+\;
+  \underset{\textcolor{Purple}{\text{\footnotesize plane + orientation}}}{%
+    a \wedge b}$%
+};
+\end{tikzpicture}
+
+\caption{\textbf{The geometric product decomposes into alignment and
+plane.}  For two vectors $a$ and~$b$: \textbf{(a)}~the angle
+$\theta$ between them encodes their full geometric relationship.
+\textbf{(b)}~The inner product $a \ip b$ extracts the projection
+of~$b$ onto~$a$ (grade-0, a scalar measuring alignment).
+\textbf{(c)}~The outer product $a \op b$ extracts the oriented
+parallelogram they span (grade-2, a bivector encoding the plane).
+The geometric product $ab = a \ip b + a \op b$ keeps both pieces:
+the dot product alone discards the plane information.}
+\label{fig:geometric-product}
+\end{figure}
+
+Standard linear algebra separates projection and orientation into
+different operations; the geometric product unifies them into a single
+object, preserving information that the dot product alone discards.  In
+the transformer, taking the geometric product of two hidden states
+reveals both their similarity (scalar part) and the plane that separates
+them (bivector part).  The scalar alone cannot distinguish different
+directions of disagreement; the bivector makes those directions explicit.
+
 \section{In matrix form}
 
 The outer product can be represented as a $k \times k$
@@ -563,8 +945,12 @@ parts:
 \]
 
 This is the simplest possible grade decomposition.  The symmetric part
-contains scalar/stretching information; the skew-symmetric part contains
-rotation/plane information.
+(grade-0) contains scalar/stretching information; the skew-symmetric part
+(grade-2) contains rotation/plane information.  In other words, symmetric
+matrices describe \emph{how much} each direction is stretched, while
+skew-symmetric matrices describe \emph{which planes} the data rotates in
+and by how much.  This correspondence becomes concrete in
+Chapter~\ref{chap:planes}.
 
 \begin{lstlisting}[caption={Grade decomposition of a matrix}]
 from layer_time_ga.algebra import grade_decomposition
@@ -603,6 +989,10 @@ As the angle between two unit vectors sweeps from $0^\circ$ to $90^\circ$, the s
 \captionof{figure}{Geometric product decomposition: scalar (grade-0) vs.\
 bivector (grade-2) content as a function of angle.}
 \end{center}
+
+\medskip
+\textbf{What this tells you.}
+Perpendicular vectors produce pure bivector (all plane, no alignment), while parallel vectors produce pure scalar (all alignment, no plane). The value $1.4142 = \sqrt{2}$ for the bivector norm arises because the basis bivector $e_1 \op e_2$ has Frobenius norm $\sqrt{2}$. This scalar-vs-bivector partition is the template for every decomposition in this book: grade-0 measures ``how much,'' grade-2 measures ``in which plane.''
 \end{tryit}
 
 
@@ -647,7 +1037,10 @@ This represents activity in \emph{multiple} planes simultaneously.
 
 \begin{itemize}[nosep]
 \item A \textbf{simple bivector} represents a single plane of rotation.
-  Eigendecomposition of its skew matrix gives one conjugate pair
+  A skew-symmetric matrix has purely imaginary eigenvalues that come in
+  conjugate pairs $\pm i\sigma$ (where $\sigma$ is a real number).  Each
+  pair corresponds to one rotation plane.  Eigendecomposition of a simple
+  bivector's skew matrix gives exactly one such conjugate pair
   $\pm i\sigma$.
 \item A \textbf{compound bivector} represents rotation in multiple planes.
   Its skew matrix has multiple conjugate pairs
@@ -700,6 +1093,158 @@ for i, p in enumerate(planes):
 The weights tell you how the rotation is distributed across planes.
 If the top plane has most of the weight, the rotation is nearly simple.
 If the weights are spread, the rotation acts in many planes.
+
+% ── Figure: Decomposing a bivector into principal planes ───────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  vec/.style={->, line width=1.4pt},
+  lbl/.style={font=\small},
+  plane/.style={fill opacity=0.15, draw opacity=0.6, line width=0.6pt},
+]
+
+% ── Panel A: Simple bivector (one plane) ──
+\begin{scope}[shift={(-5.2,0)}]
+  % Plane
+  \fill[Blue!15, draw=Blue!50, line width=0.5pt]
+    (-0.3,-0.3) -- (2.6,-0.3) -- (3.8,2.0) -- (0.9,2.0) -- cycle;
+  % Vectors
+  \draw[vec, Navy] (0,0) -- (2.3,0) node[right, lbl, Navy] {$a$};
+  \draw[vec, Blue] (0,0) -- (1.2,1.7) node[above right, lbl, Blue] {$b$};
+  % Orientation arc
+  \draw[->, Purple, thick] (1.0,0.4) arc[start angle=-10, end angle=60, radius=0.5]
+    node[above left=-2pt, font=\scriptsize, Purple] {orient.};
+  % Label
+  \node[below=14pt, font=\small\bfseries, Navy] at (1.2, -0.5)
+    {(a)\; Simple bivector};
+  \node[below=28pt, font=\footnotesize, DGray] at (1.2, -0.5)
+    {one plane: $a \op b$};
+\end{scope}
+
+% ── Panel B: Compound bivector (two planes) ──
+\begin{scope}[shift={(1.2,0)}]
+  % Plane 1 (horizontal-ish)
+  \fill[Teal!15, draw=Teal!50, line width=0.5pt]
+    (-0.2,-0.2) -- (2.0,-0.2) -- (2.6,0.8) -- (0.4,0.8) -- cycle;
+  \draw[vec, Teal!80!black] (0,0) -- (1.8,0)
+    node[right, font=\scriptsize, Teal!80!black] {$e_1$};
+  \draw[vec, Teal!80!black] (0,0) -- (0.6,0.8)
+    node[above, font=\scriptsize, Teal!80!black] {$e_2$};
+  \node[font=\scriptsize, Teal!80!black] at (1.3,0.5) {$\sigma_1$};
+
+  % Plane 2 (tilted, offset)
+  \fill[Purple!15, draw=Purple!50, line width=0.5pt]
+    (0.2,1.0) -- (2.0,1.0) -- (2.5,2.2) -- (0.7,2.2) -- cycle;
+  \draw[vec, Purple!80!black] (0.4,1.2) -- (1.9,1.2)
+    node[right, font=\scriptsize, Purple!80!black] {$e_3$};
+  \draw[vec, Purple!80!black] (0.4,1.2) -- (0.9,2.0)
+    node[above, font=\scriptsize, Purple!80!black] {$e_4$};
+  \node[font=\scriptsize, Purple!80!black] at (1.5,1.8) {$\sigma_2$};
+
+  % Plus sign between planes
+  \node[font=\large, DGray] at (1.2, 0.9) {$+$};
+
+  % Label
+  \node[below=14pt, font=\small\bfseries, Navy] at (1.2, -0.5)
+    {(b)\; Compound bivector};
+  \node[below=28pt, font=\footnotesize, DGray] at (1.2, -0.5)
+    {$B = \sigma_1(e_1\!\op\! e_2) + \sigma_2(e_3\!\op\! e_4)$};
+\end{scope}
+
+% ── Panel C: Principal plane spectrum (bar chart) ──
+\begin{scope}[shift={(7.0,0)}]
+  % Axes
+  \draw[->, DGray, line width=0.6pt] (0,0) -- (3.4,0)
+    node[right, font=\scriptsize, DGray] {plane index};
+  \draw[->, DGray, line width=0.6pt] (0,0) -- (0,2.6)
+    node[above, font=\scriptsize, DGray] {$\sigma_j$};
+
+  % Bars
+  \fill[Teal!60] (0.15,0) rectangle (0.65,2.1);
+  \fill[Purple!60] (0.85,0) rectangle (1.35,1.5);
+  \fill[Amber!60] (1.55,0) rectangle (2.05,0.6);
+  \fill[DGray!30] (2.25,0) rectangle (2.75,0.2);
+
+  % Bar labels
+  \node[below, font=\scriptsize, DGray] at (0.4, 0) {1};
+  \node[below, font=\scriptsize, DGray] at (1.1, 0) {2};
+  \node[below, font=\scriptsize, DGray] at (1.8, 0) {3};
+  \node[below, font=\scriptsize, DGray] at (2.5, 0) {4};
+
+  % Value labels
+  \node[above, font=\scriptsize, Teal!80!black] at (0.4, 2.1) {$\sigma_1$};
+  \node[above, font=\scriptsize, Purple!80!black] at (1.1, 1.5) {$\sigma_2$};
+  \node[above, font=\scriptsize, Amber!80!black] at (1.8, 0.6) {$\sigma_3$};
+
+  % Label
+  \node[below=14pt, font=\small\bfseries, Navy] at (1.4, -0.5)
+    {(c)\; Principal plane spectrum};
+  \node[below=28pt, font=\footnotesize, DGray] at (1.4, -0.5)
+    {each bar = one rotation plane};
+\end{scope}
+\end{tikzpicture}
+
+\medskip
+% ── Summary equation ──
+\begin{tikzpicture}
+\node[draw=Navy, rounded corners=4pt, fill=LBlue, inner sep=8pt, font=\normalsize] {%
+  $B \;=\; \displaystyle\sum_{j=1}^{r} \sigma_j \;
+  \underbrace{(u_j \op v_j)}_{\text{\footnotesize principal plane } j}$%
+};
+\end{tikzpicture}
+
+\caption{A bivector decomposes into principal planes.
+\textbf{(a)}~A simple bivector represents rotation in a single plane.
+\textbf{(b)}~A compound bivector combines rotations in multiple
+independent planes, each with its own strength~$\sigma_j$.
+\textbf{(c)}~The principal plane spectrum shows how rotation is
+distributed across planes.  In transformers, each layer's bivector
+typically has 3--5 dominant planes, revealing that the model rotates
+representations simultaneously in multiple directions.}
+\label{fig:principal-planes}
+\end{figure}
+
+% ── Mathematical anchor ──
+The decomposition corresponds to the block-diagonal form of a
+skew-symmetric matrix.  Since $B^\top = -B$, every real eigenvalue
+is zero and the non-zero eigenvalues come in conjugate pairs
+$\pm i\sigma_j$:
+\[
+  B = Q
+  \begin{bmatrix}
+  \begin{smallmatrix}
+    0 & \sigma_1 \\
+    -\sigma_1 & 0
+  \end{smallmatrix}
+  & & \\
+  & \ddots & \\
+  & &
+  \begin{smallmatrix}
+    0 & \sigma_r \\
+    -\sigma_r & 0
+  \end{smallmatrix}
+  \end{bmatrix}
+  Q^\top
+\]
+Each $2 \times 2$ block corresponds to one principal plane $(u_j, v_j)$
+with rotation magnitude $\sigma_j$.  The columns of $Q$ provide the
+plane basis vectors.
+
+In dimensions higher than three, there is no single axis of rotation.
+Every rotation occurs in a plane.  A general transformation is therefore
+not ``a rotation,'' but a combination of rotations across multiple planes.
+The principal plane decomposition makes these planes explicit, turning an
+opaque matrix into a set of interpretable geometric components.
+
+\begin{transformer}
+In a transformer layer, the extracted bivector is rarely simple.
+Instead, it spreads across several principal planes, typically with a
+small number of dominant components.  These planes characterise how the
+model reorganises information at that layer.  This decomposition is the
+rotational analogue of PCA: instead of explaining variance along
+\emph{directions}, we explain transformation along \emph{planes}.
+\end{transformer}
 
 \section{Bivector arithmetic}
 
@@ -757,7 +1302,7 @@ have 3--5 dominant planes.}
 
 \begin{whycare}
 Geometric Algebra assumes you are working in an orthonormal frame:
-$e_i \ip e_j = \delta_{ij}$.  Raw transformer hidden states violate
+$e_i \ip e_j = \delta_{ij}$ (that is, 1 when $i = j$ and 0 otherwise).  Raw transformer hidden states violate
 this assumption badly.  This chapter teaches you why the frame matters,
 what goes wrong without it, and how whitening constructs the orthonormal
 frame that makes all subsequent GA operations valid.
@@ -766,7 +1311,7 @@ frame that makes all subsequent GA operations valid.
 \section{Frames and metrics}
 
 A \textbf{frame} is a set of basis vectors $\{e_1, \ldots, e_k\}$ for
-your space.  The \textbf{metric tensor} $g_{ij} = e_i \ip e_j$ tells
+your space.  The \textbf{metric matrix} (also called the Gram matrix) $g_{ij} = e_i \ip e_j$ records the pairwise dot products of all basis vectors and tells
 you how the basis vectors relate to each other.
 
 In an \textbf{orthonormal frame}: $g_{ij} = \delta_{ij}$ (the identity
@@ -781,12 +1326,13 @@ matrix).  This means:
 \begin{gabox}
 \textbf{The Clifford algebra $\mathrm{Cl}(k, 0)$.}
 
-Our algebra is defined over $\mathbb{R}^k$ with a positive-definite
-metric: $e_i^2 = e_i \ip e_i = +1$ for all $i$.  This is denoted
-$\mathrm{Cl}(k, 0)$ (the second number, 0, means no negative-signature
-directions).  For this algebra to work correctly, we need coordinates
-in which the metric actually \emph{is} the identity.  Whitening provides
-these coordinates.
+Our algebra is defined over $\mathbb{R}^k$ where every basis vector
+squares to $+1$: $e_i^2 = e_i \ip e_i = +1$ for all $i$.  The notation
+$\mathrm{Cl}(k, 0)$ means $k$ basis vectors that each square to $+1$,
+and zero that square to $-1$.  (In physics, spacetime uses basis vectors
+with mixed signs; we do not need that here.)  For this algebra to work
+correctly, we need coordinates in which the metric actually \emph{is}
+the identity.  Whitening provides these coordinates.
 \end{gabox}
 
 \section{What goes wrong without whitening}
@@ -851,6 +1397,7 @@ variance.  This is a lossy projection, but the lost dimensions carry
 negligible information.
 
 \begin{finding}
+\textbf{Empirical observation (Qwen2.5-7B).}
 The geometric structure (rotor angles, curvature patterns) stabilizes by
 $k \approx 128$.  Using $k = 256$ provides comfortable headroom.
 The coarse features (which layers have high rotation) are visible even
@@ -901,8 +1448,10 @@ apply rotors.
 
 \section{From matrices to rotors}
 
-An orthogonal matrix $U \in \mathrm{SO}(k)$ (rotation, determinant
-$= +1$) encodes a rotation, but does not make the plane or angle
+An orthogonal matrix $U$ with determinant $+1$ --- a pure rotation, no
+reflections.  The set of all such $k \times k$ rotation matrices is
+written $\mathrm{SO}(k)$ (for `special orthogonal group').
+Such a matrix encodes a rotation, but does not make the plane or angle
 obvious.  To extract them, you must compute eigenvalues --- and in
 $k > 3$ dimensions, there are multiple planes.
 
@@ -911,8 +1460,10 @@ A \textbf{rotor} encodes the same rotation more transparently:
   R = \exp\!\left(-\frac{B \theta}{2}\right)
 \]
 where $B$ is the unit bivector of the rotation plane and $\theta$ is the
-angle.  The factor of $1/2$ is the GA convention (it arises because the
-rotor acts by \emph{double} cover: the sandwich product).
+angle.  The factor of $1/2$ appears because a rotor acts on a vector from
+\emph{both sides} (the sandwich product $Rv\rev{R}$, introduced in the
+next section).  Each side contributes half the angle, so the total
+rotation is $\theta$.
 
 \section{The sandwich product}
 
@@ -920,8 +1471,9 @@ A rotor acts on a vector by the \textbf{sandwich product}:
 \[
   v' = R \gp v \gp \rev{R}
 \]
-where $\rev{R} = R^{-1} = \exp(+B\theta/2)$ is the \textbf{reversion}
-(the GA analog of transpose/inverse for orthogonal elements).
+where $\widetilde{R}$ (called the \emph{reverse} of $R$) is the GA
+equivalent of the matrix transpose.  For rotors, the reverse equals the
+inverse: $\widetilde{R} = R^{-1} = \exp(+B\theta/2)$.
 
 \begin{keyidea}
 The sandwich product rotates $v$ by angle $\theta$ in the plane $B$,
@@ -936,6 +1488,9 @@ extract the bivector generator via the matrix logarithm:
 \[
   U \in \mathrm{SO}(k) \;\xrightarrow{\;\log\;}\; A = \log(U) \;\text{(skew-symmetric)} = B \;\text{(bivector)}
 \]
+Why is $\log(U)$ skew-symmetric?  Because $U$ is orthogonal
+($U^\top U = I$), and the logarithm of any rotation must be
+skew-symmetric --- the same symmetric/skew connection from Chapter~2.
 
 \begin{lstlisting}[caption={From orthogonal matrix to rotor}]
 from scipy.linalg import expm
@@ -985,11 +1540,105 @@ R_id = rotor_compose(R, R_inv)
 print(f"R * R^-1 deviation: {R_id.deviation_from_identity():.2e}")
 \end{lstlisting}
 
+\subsection*{The Cayley map: an algebraic shortcut}
+
+The matrix logarithm gives exact bivectors but requires computing matrix
+exponentials and logarithms, which are expensive.  The \textbf{Cayley map}
+achieves the same goal using only matrix addition and inversion --- no
+exponentials or logarithms needed.
+
+\begin{gabox}
+\textbf{The Cayley map.}
+Given an orthogonal matrix $U \in \mathrm{SO}(k)$ with no eigenvalue
+equal to $-1$ (an eigenvalue of $-1$ means a $180^\circ$ rotation in
+some plane --- the Cayley map's one blind spot), the skew-symmetric matrix
+\[
+  A = (U - I)(U + I)^{-1}
+\]
+is the \textbf{Cayley bivector} of $U$.  Its principal planes are the
+rotation planes of $U$, and the corresponding entries encode
+$\tan(\theta_j / 2)$ rather than $\theta_j$ itself.
+
+The scalar magnitude $\tau = \|A\|_F / \sqrt{2}$ equals $\tan(\theta/2)$
+for a single-plane rotation of angle~$\theta$.
+\end{gabox}
+
+The Cayley map is the inverse of the Cayley transform
+$U = (I - A)(I + A)^{-1}$, which maps skew-symmetric matrices to
+orthogonal matrices.  Since no logarithm or exponential is needed, the
+Cayley map is fast and numerically clean.  Its only limitation: if $U$
+has an eigenvalue of exactly~$-1$ (a~$180^\circ$ rotation), the matrix
+$U + I$ is singular and the map breaks down.
+
+\begin{lstlisting}[caption={Cayley bivector from two vectors}]
+from layer_time_ga.algebra import cayley_bivector
+
+u = H_whitened[10, 3]   # hidden state at layer 10, token 3
+v = H_whitened[11, 3]   # hidden state at layer 11, token 3
+u_hat = u / np.linalg.norm(u)
+v_hat = v / np.linalg.norm(v)
+
+biv, tau = cayley_bivector(u_hat, v_hat)
+print(f"Cayley tau = {tau:.4f}")
+print(f"Bivector norm = {biv.norm:.4f}")
+planes = biv.principal_planes(n_planes=2)
+\end{lstlisting}
+
+Chapter~\ref{chap:applications} uses the Cayley bivector to measure how
+much a specific context word steers the hidden state --- the magnitude
+$\tau$ tells you how strongly, and the bivector tells you in which plane.
+
+\subsection*{Rodrigues' formula: rotating one vector to another}
+
+There is a third construction that is especially natural when your
+starting data is \emph{two vectors} rather than a matrix.  Given unit
+vectors $\hat{u}$ and $\hat{v}$, the \textbf{Rodrigues rotation} is the
+unique rotation in the $\hat{u} \op \hat{v}$ plane that sends $\hat{u}$
+to $\hat{v}$:
+
+\begin{gabox}
+\textbf{Rodrigues' rotation formula.}
+Let $\hat{B} = (\hat{u} \op \hat{v}) / \|\hat{u} \op \hat{v}\|$ be the
+unit bivector in the plane of $\hat{u}$ and $\hat{v}$, and
+$\theta = \arccos(\hat{u}^\top \hat{v})$ the angle between them.  Then:
+\[
+  R = I + \sin\theta \; \hat{B} + (1 - \cos\theta) \; \hat{B}^2
+\]
+The unit bivector $\hat{B}$ squares to $-I$ (restricted to its plane),
+so it behaves like the imaginary unit $i$.  Euler's formula
+$e^{-i\theta} = \cos\theta - i\sin\theta$ therefore generalises:
+$\exp(-\hat{B}\theta) = I\cos\theta - \hat{B}\sin\theta$.
+The expression above is the matrix form of the rotor
+$R = \exp(-\hat{B}\theta/2)$, expanded via this generalised Euler's
+formula.
+\end{gabox}
+
+\paragraph{Why three methods?}
+You now have three ways to extract a rotation's bivector generator:
+\begin{enumerate}[nosep]
+\item \textbf{Matrix logarithm}: $U \xrightarrow{\log} B\theta$.  Exact,
+  handles multiple planes, but requires an $O(k^3)$ matrix logarithm.
+\item \textbf{Cayley map}: $A = (U-I)(U+I)^{-1}$.  Algebraic (no
+  transcendental functions), returns $B\tan(\theta/2)$.  Fails if $U$
+  has eigenvalue $-1$ (i.e., a $180^\circ$ rotation).
+\item \textbf{Rodrigues}: direct from two vectors, exact for any angle,
+  $O(k^2)$.  But only handles a single rotation plane.
+\end{enumerate}
+
+In practice: use the \textbf{matrix logarithm} for layer transition
+operators (which have multiple rotation planes), and
+\textbf{Rodrigues or Cayley} when comparing two hidden-state vectors
+(which define a single plane).  Chapter~\ref{chap:applications} uses
+the Cayley form; the transport operators in
+Chapter~\ref{chap:holonomy} use Rodrigues because it is exact even for
+the large angles ($>60^\circ$) that arise at the embedding layer.
+
 \begin{transformer}
 Every layer transition in a transformer contains a rotation.  The rotor
 at layer $l$ has a bivector $\bivec{l}$ encoding which planes the layer
 rotates in.  The collection of rotors across all layers is the
-\textbf{rotor field} --- a discrete gauge connection on the layer axis.
+\textbf{rotor field} --- one rotor per layer, describing how the
+hidden-state orientation changes step by step through the network.
 Chapter~\ref{chap:versor} shows how to extract it from real data.
 \end{transformer}
 
@@ -1012,6 +1661,10 @@ Chapter~\ref{chap:versor} shows how to extract it from real data.
 \item Composition: $R$ (angle $0.889$), $R_2$ (angle $0.668$), $R_1 R_2$ (angle $0.983$)
 \item $R R^{-1}$ deviation from identity: $5.2 \times 10^{-16}$
 \end{itemize}
+
+\medskip
+\textbf{What this tells you.}
+The rotor preserves norms (a rotation never stretches) and rotates by exactly the requested angle. The composition is more subtle: the combined angle $0.983$ is less than the sum $0.889 + 0.668 = 1.557$. This happens because $R_1$ and $R_2$ act in \emph{different} planes --- just as walking north then east puts you closer to the origin than walking north twice. Only rotors in the \emph{same} plane add their angles. The machine-precision deviation $5.2 \times 10^{-16}$ confirms that rotor inversion is numerically exact.
 \end{tryit}
 
 
@@ -1024,7 +1677,11 @@ Chapter~\ref{chap:versor} shows how to extract it from real data.
 We now apply our GA toolkit to real transformer data.  Each layer
 transition decomposes into a rotor (rotation, grade-2) and a metric
 factor (stretching, grade-0).  This is the \textbf{versor decomposition},
-the GA analog of the polar decomposition.  We build the rotor field and
+the GA analog of the polar decomposition.  In GA, any element that
+performs a rotation is called a \emph{versor}.  The versor decomposition
+separates the rotation from the stretching, just as the polar
+decomposition $T = UP$ separates an orthogonal factor $U$ from a
+positive-definite factor~$P$.  We build the rotor field and
 see how information rotates and stretches across the entire network.
 \end{whycare}
 
@@ -1067,30 +1724,265 @@ for i, vd in enumerate(rf.decompositions):
           f"{vd.effective_rank:8.1f}")
 \end{lstlisting}
 
+\section{A layer is a field, not a single operator}
+
+The standard picture treats a transformer layer as a single matrix
+$T^{(l)}$ that acts uniformly on all token positions.  But attention
+mixes tokens differently at each position, so the \emph{effective}
+transformation depends on~$t$.  The rotor field makes this explicit:
+
+\[
+  H^{(l+1)}(t) \;=\; R^{(l)}(t)\;\; H^{(l)}(t)
+\]
+
+where $R^{(l)}(t)$ is the rotor at position~$t$ in layer~$l$.  The
+layer is not ``a rotation'' --- it is a \textbf{field of rotors}, one
+per token position.
+
+% ── Figure: Transformer layer as a rotor field ─────────────────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  vec/.style={->, line width=1.2pt},
+  node box/.style={draw=#1, fill=white, rounded corners=3pt,
+    minimum width=22pt, minimum height=22pt, font=\footnotesize,
+    line width=0.7pt},
+  rotor/.style={draw=#1, fill=white, circle,
+    minimum size=24pt, font=\footnotesize, line width=0.8pt},
+  lbl/.style={font=\small},
+  brace/.style={decorate, decoration={brace, amplitude=5pt, mirror}},
+]
+
+% ── Panel A: Standard view ──
+\begin{scope}[shift={(-5.6,0)}]
+  % Title
+  \node[font=\small\bfseries, Navy] at (1.6,3.2) {(a)\; Standard view};
+
+  % Input row
+  \foreach \i/\tok in {0/$H_1$, 1/$H_2$, 2/$H_3$, 3/$H_4$, 4/$H_5$} {
+    \node[node box=Navy] (in\i) at (\i*0.8, 2.0) {\tok};
+  }
+  \node[left=4pt, font=\scriptsize, DGray] at (in0.west) {layer $l$};
+
+  % Single matrix
+  \node[draw=DGray, fill=LGray, rounded corners=4pt,
+    minimum width=90pt, minimum height=20pt, font=\small]
+    (mat) at (1.6, 0.9) {$T^{(l)}$};
+
+  % Output row
+  \foreach \i/\tok in {0/$H_1'$, 1/$H_2'$, 2/$H_3'$, 3/$H_4'$, 4/$H_5'$} {
+    \node[node box=DGray!60] (out\i) at (\i*0.8, -0.4) {\tok};
+  }
+  \node[left=4pt, font=\scriptsize, DGray] at (out0.west) {layer $l\!+\!1$};
+
+  % Arrows (all through the same matrix)
+  \foreach \i in {0,...,4} {
+    \draw[->, DGray!50, line width=0.5pt] (in\i.south) -- (mat.north -| in\i);
+    \draw[->, DGray!50, line width=0.5pt] (mat.south -| out\i) -- (out\i.north);
+  }
+
+  % Caption
+  \node[font=\scriptsize, DGray, text width=3.8cm, align=center]
+    at (1.6, -1.2) {one matrix transforms\\all positions uniformly};
+\end{scope}
+
+% ── Arrow between panels ──
+\draw[->, line width=1.6pt, Navy] (-1.0, 0.9) -- (0.4, 0.9)
+  node[midway, above=3pt, font=\footnotesize\bfseries, Navy] {GA reframing};
+
+% ── Panel B: Rotor field view ──
+\begin{scope}[shift={(1.2,0)}]
+  % Title
+  \node[font=\small\bfseries, Navy] at (2.8,3.2) {(b)\; Rotor field view};
+
+  % Input row
+  \foreach \i/\tok in {0/$H_1$, 1/$H_2$, 2/$H_3$, 3/$H_4$, 4/$H_5$} {
+    \node[node box=Navy] (gin\i) at (\i*1.12, 1.8) {\tok};
+  }
+  \node[left=4pt, font=\scriptsize, DGray] at (gin0.west) {layer $l$};
+
+  % Individual rotors (with different plane orientations)
+  \node[rotor=Teal] (r0) at (0*1.12, 0.9) {$R_1$};
+  \node[rotor=Purple] (r1) at (1*1.12, 0.9) {$R_2$};
+  \node[rotor=DGreen] (r2) at (2*1.12, 0.9) {$R_3$};
+  \node[rotor=Amber] (r3) at (3*1.12, 0.9) {$R_4$};
+  \node[rotor=DRed] (r4) at (4*1.12, 0.9) {$R_5$};
+
+  % Rotation arc arrows drawn outside each rotor circle
+  \draw[->, Teal, line width=1pt]
+    ([shift={(60:0.50)}]r0.center) arc[start angle=60, end angle=300, radius=0.50];
+  \draw[->, Purple, line width=1pt]
+    ([shift={(80:0.50)}]r1.center) arc[start angle=80, end angle=320, radius=0.50];
+  \draw[->, DGreen, line width=1pt]
+    ([shift={(40:0.50)}]r2.center) arc[start angle=40, end angle=280, radius=0.50];
+  \draw[->, Amber, line width=1pt]
+    ([shift={(100:0.50)}]r3.center) arc[start angle=100, end angle=340, radius=0.50];
+  \draw[->, DRed, line width=1pt]
+    ([shift={(70:0.50)}]r4.center) arc[start angle=70, end angle=310, radius=0.50];
+
+  % Arrows (each through its own rotor)
+  \foreach \i in {0,...,4} {
+    \draw[->, DGray!50, line width=0.5pt] (gin\i.south) -- (r\i.north);
+  }
+
+  % Brace under rotors
+  \draw[decorate, decoration={brace, amplitude=5pt, mirror},
+    Navy, line width=0.6pt]
+    ([yshift=-3pt]r0.south west) -- ([yshift=-3pt]r4.south east)
+    node[midway, below=8pt, font=\scriptsize, Navy]
+    {each position has its own rotor};
+
+  % Output row (shifted down to avoid brace overlap)
+  \foreach \i/\tok in {0/$H_1'$, 1/$H_2'$, 2/$H_3'$, 3/$H_4'$, 4/$H_5'$} {
+    \node[node box=DGray!60] (gout\i) at (\i*1.12, -0.6) {\tok};
+  }
+  \node[left=4pt, font=\scriptsize, DGray] at (gout0.west) {layer $l\!+\!1$};
+
+  % Arrows from rotors to outputs
+  \foreach \i in {0,...,4} {
+    \draw[->, DGray!50, line width=0.5pt] (r\i.south) -- (gout\i.north);
+  }
+
+  % Caption
+  \node[font=\scriptsize, DGray, text width=5.4cm, align=center]
+    at (2.24, -1.4) {$R^{(l)}(t) = \exp(-B^{(l)}(t)/2)$\\
+    different plane \& angle at each $t$};
+\end{scope}
+\end{tikzpicture}
+
+\caption{A transformer layer as a field of rotors.
+\textbf{(a)}~The standard view treats a layer as a single matrix
+$T^{(l)}$ acting uniformly on all tokens.
+\textbf{(b)}~The geometric view reveals that each token position~$t$
+experiences its own transformation, represented by a rotor
+$R^{(l)}(t)$ with its own rotation plane and angle.
+These rotors vary across positions, forming a rotor field over the
+token dimension.  Transformer computation is not uniform but
+spatially structured across tokens.}
+\label{fig:rotor-field}
+\end{figure}
+
+Although a transformer layer is implemented as shared-weight matrix
+operations, its effect is not uniform across tokens.  Because attention
+mixes tokens differently at each position, the effective transformation
+depends on~$t$.  The rotor field makes this explicit: the model applies
+different geometric operations at different positions, even within a
+single layer.
+
+\begin{gabox}
+\textbf{From local linearisation to rotor.}
+At each token position, the local linearisation defines an operator
+$U^{(l)}(t)$, whose logarithm gives the bivector generator:
+\[
+  B^{(l)}(t) = \log\!\big(U^{(l)}(t)\big),
+  \qquad
+  R^{(l)}(t) = \exp\!\left(-\tfrac{1}{2}\, B^{(l)}(t)\right).
+\]
+Each local transformation thus decomposes into a bivector (plane and
+magnitude), yielding a rotor representation.  The map
+$R^{(l)} : t \mapsto \mathrm{Spin}(k)$ defines a field from token
+positions to the spin group.
+\end{gabox}
+
+This perspective turns the transformer into a discrete geometric field
+theory: tokens are positions, layers are time, and rotors describe local
+transformations.  The remainder of this chapter examines the signatures
+of this field.
+
 \section{What the rotor field tells you}
 
 The rotor field has three main signatures:
 
 \begin{finding}
-\textbf{1. Rotation angle profile.}  The angle $\theta^{(l)}$ measures
-how much the hidden states rotate at each layer.  Typically: moderate
-rotation in early layers, a dip in the middle, and a peak in the final
-layers as the model converges to a prediction.
+\textbf{1. Rotation angle profile} (observed in Qwen2.5-7B).
+The angle $\theta^{(l)}$ measures how much the hidden states rotate at
+each layer.  In our experiments: moderate rotation in early layers, a
+dip in the middle, and a peak in the final layers as the model
+converges to a prediction.
 \end{finding}
 
 \begin{finding}
-\textbf{2. Condition number profile.}  The condition number $\kappa^{(l)}$
-of the metric factor $\metric{l}$ measures how selective the layer is.
-Late layers have $\kappa \gg 1$: they strongly amplify a few directions
-and suppress the rest.
+\textbf{2. Condition number profile} (observed in Qwen2.5-7B).
+The condition number $\kappa^{(l)}$ of the metric factor $\metric{l}$
+measures how selective the layer is.  In late layers, $\kappa \gg 1$:
+the layer strongly amplifies a few directions and suppresses the rest.
 \end{finding}
 
 \begin{finding}
-\textbf{3. Effective rank profile.}  The effective rank
-$\mathrm{erank}^{(l)}$ measures how many directions are actively used.
-It decreases from early to late layers: the representation concentrates
-into a lower-dimensional subspace.
+\textbf{3. Effective rank profile} (observed in Qwen2.5-7B).
+The effective rank $\mathrm{erank}^{(l)}$ measures how many directions
+are actively used.  It tends to decrease from early to late layers: the
+representation concentrates into a lower-dimensional subspace.
 \end{finding}
+
+\section{The three-phase structure}
+
+When you look at all three signatures together --- rotation angles,
+condition numbers, and effective ranks --- a consistent pattern emerges
+across different models and prompts.  The rotor field naturally divides
+into three computational phases:
+
+\begin{gabox}
+\textbf{Three-phase structure of the rotor field.}
+\begin{enumerate}[nosep]
+\item \textbf{Early layers (embedding phase).}  Large rotation angles,
+  low condition numbers ($\kappa \approx 1$--$3$), high effective rank.
+  The model rotates raw embeddings into a shared geometric frame ---
+  primarily a \emph{grade-2} operation (grade-2 = changing direction).
+\item \textbf{Middle layers (interaction phase).}  Moderate rotation,
+  rising $\kappa$, curvature peaks.  This is where layer and token
+  operations fail to commute (Chapter~\ref{chap:holonomy}), producing
+  the non-separable computation that distinguishes reasoning from lookup.
+  Both grade-0 and grade-2 contribute.
+\item \textbf{Late layers (readout phase).}  Small rotation, large
+  $\kappa$ (high selectivity), low effective rank.  The model
+  concentrates onto a few directions for the final prediction ---
+  primarily a \emph{grade-0} operation (grade-0 = changing magnitude).
+\end{enumerate}
+\end{gabox}
+
+The transition between phases is not arbitrary --- it reflects a shift
+in which \emph{grade} of the geometric product dominates the dynamics.
+
+\textbf{What drives this structure?}  The answer lies at the output.
+The model predicts by computing $\mathrm{logit}_w = W_{\mathrm{head}}[w] \cdot H^{(L-1)}$:
+the logit for word $w$ is the dot product of the final hidden state with
+the $w$-th row of the unembedding matrix (Appendix~\ref{app:transformers}).
+For the correct prediction to win, $H^{(L-1)}$ must \emph{point in the
+right direction}.  This directional requirement propagates backward
+through the network: early layers must rotate the embedding into an
+orientation from which middle layers can perform contextual computation,
+and late layers must funnel the result toward the target vocabulary
+vector.  The rotation activity we observe is not incidental --- it is the
+geometric mechanism by which the model steers its representation toward
+the correct prediction.
+
+\section{The directional flow ratio}
+
+To quantify the grade balance at each layer, we define:
+\[
+  \mathcal{R}^{(l)} = \frac{\|A^{(l)}\|_F}{\|S^{(l)}\|_F + \epsilon}
+\]
+where $A^{(l)} = \frac{1}{2}(T^{(l)} - T^{(l)\top})$ is the
+\textbf{antisymmetric part} (grade-2, bivector) and
+$S^{(l)} = \frac{1}{2}(T^{(l)} + T^{(l)\top})$ is the
+\textbf{symmetric part} (grade-0, metric) of the layer transition
+operator.
+
+\begin{keyidea}
+The directional flow ratio $\mathcal{R}^{(l)}$ is the grade-2--to--grade-0
+ratio at each layer.
+\begin{itemize}[nosep]
+\item $\mathcal{R} \gg 1$: rotation dominates (changing direction).
+\item $\mathcal{R} \ll 1$: stretching dominates (changing scale).
+\item $\mathcal{R} \approx 1$: both contribute equally.
+\end{itemize}
+Plotting $\mathcal{R}^{(l)}$ across layers makes the three-phase
+structure visible in a single curve.  Typically,
+$\mathcal{R} \sim 0.03$--$0.06$ overall (metric-dominated), but the
+ratio is higher in early layers and drops in late layers.
+\end{keyidea}
 
 \section{Grade-0 vs grade-2: which dominates?}
 
@@ -1103,19 +1995,20 @@ For each layer, compare:
 \end{align}
 
 \begin{finding}
-\textbf{Grade-0 dominates grade-2 in late layers.}  The metric
-deformation (stretching) is 5--10$\times$ larger than the rotation
-in the final layers.  This means late layers primarily
-\emph{select directions} (amplify/compress) rather than
-\emph{reorient} (rotate).
+\textbf{Grade-0 dominates grade-2 in late layers} (observed in
+Qwen2.5-7B).  The metric deformation (stretching) is
+5--10$\times$ larger than the rotation in the final layers.  This
+suggests that late layers primarily \emph{select directions}
+(amplify/compress) rather than \emph{reorient} (rotate).
 \end{finding}
 
 \begin{transformer}
-This has a profound implication for controlling model behavior.
-Modifying eigenvalues of $\metric{l}$ (grade-0 intervention) changes
-$D_{\text{total}}$ by $\sim$48\%.  Modifying the rotor (grade-2
-intervention) changes it by only $\sim$9\%.  The model's output is
-controlled by \emph{what it amplifies}, not \emph{where it points}.
+In Qwen2.5-7B, this has a striking implication for controlling model
+behavior.  Modifying eigenvalues of $\metric{l}$ (grade-0 intervention)
+changes $D_{\text{total}}$ by $\sim$48\%.  Modifying the rotor (grade-2
+intervention) changes it by only $\sim$9\%.  In this model, the output
+is controlled by \emph{what it amplifies}, not \emph{where it points}.
+Whether this generalises to other architectures is an open question.
 \end{transformer}
 
 \begin{tryit}
@@ -1127,6 +2020,10 @@ dominate?  Compare two prompts: does the crossover point change?
 \textbf{Sample output} (Qwen2.5-7B, 27 layer transitions):
 Peak rotation angle at layer~1 ($4.28$ rad).
 Mean grade-0 norm: $2.24$; mean grade-2 norm: $5.30$.
+
+\medskip
+\textbf{What this tells you.}
+A peak rotation of $4.28$ radians (about $245^\circ$) means the first layer nearly reverses the hidden-state direction --- a massive reorientation that encodes token identities into the model's internal coordinate system. The grade-2 norm ($5.30$) exceeding the grade-0 norm ($2.24$) tells us the network rotates more than it stretches, on average. However, as the plot below shows, the balance shifts toward grade-0 in later layers, where selective amplification matters more than reorientation.
 
 \begin{center}
 \includegraphics[width=0.85\linewidth]{figures_ga_learning/ch06_rotor_angles.pdf}
@@ -1196,9 +2093,10 @@ Questions this answers:
 \begin{gabox}
 \textbf{This is the core GA diagnostic.}  Everything we build from here
 --- holonomy, commutators, capacity --- preserves the bivector and its
-plane information.  The first-edition scalar summaries ($\|U - I\|_F$,
-$\|[A_i, A_j]\|_F$, $\|\Omega - I\|_F$) are the \emph{norms} of
-these bivectors.  GA keeps the full directional information.
+plane information.  Scalar summaries --- the size of a rotation
+($\|U - I\|_F$), the size of a commutator ($\|[A_i, A_j]\|_F$), or the
+size of holonomy ($\|\Omega - I\|_F$) --- tell you \emph{how much}.
+The GA equivalents tell you \emph{how much and in which plane}.
 \end{gabox}
 
 \section{Plane similarity between layers}
@@ -1208,7 +2106,7 @@ similarity between their bivector matrices:
 \[
   \text{sim}(l, l') = \frac{\langle \bivec{l}, \bivec{l'} \rangle}
     {\|\bivec{l}\| \, \|\bivec{l'}\|}
-  = \frac{\mathrm{tr}(\bivec{l}^\top \bivec{l'})}
+  = \frac{\mathrm{tr}({\bivec{l}}^{\!\top} \bivec{l'})}
     {\|\bivec{l}\|_F \, \|\bivec{l'}\|_F}
 \]
 
@@ -1270,7 +2168,9 @@ with eigenvalues $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k > 0$.
   directions and suppresses others.
 \item $\kappa = \sigma_1 / \sigma_k$: the \textbf{condition number}.
 \item $\mathrm{erank} = \exp H(\hat{\sigma})$: the \textbf{effective
-  rank}, where $\hat{\sigma}_i = \sigma_i / \sum \sigma_j$.
+  rank}, where $H(\hat{\sigma}) = -\sum_i \hat{\sigma}_i \log
+  \hat{\sigma}_i$ is the Shannon entropy of the normalised spectrum
+  $\hat{\sigma}_i = \sigma_i / \sum_j \sigma_j$.
 \end{itemize}
 
 \section{Why grade-0 dominates}
@@ -1279,10 +2179,18 @@ with eigenvalues $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k > 0$.
 Rotation (grade-2) preserves norms by definition: $\|Rv\| = \|v\|$.
 Stretching (grade-0) changes norms: $\|Pv\| \neq \|v\|$ in general.
 
-During backpropagation, gradient magnitudes are controlled by the
-eigenvalues of $P$, not by the rotation.  This is why modifying
-eigenvalues (grade-0) has a 48\% effect on dependency while modifying
-the rotor (grade-2) has only a 9\% effect.
+The model predicts by computing $\mathrm{logit}_w = W_{\mathrm{head}}[w]
+\cdot H^{(L-1)}$: a dot product between the final hidden state and each
+vocabulary vector.  For the correct prediction to win, $H^{(L-1)}$ must
+have a large component along the target direction.  Rotation can point the
+vector toward the right direction, but only stretching can
+\emph{amplify} that direction relative to competitors.  This is why
+grade-0 controls the output: modifying eigenvalues (grade-0) has a 48\%
+effect on dependency while modifying the rotor (grade-2) has only a
+9\% effect.
+
+Both grades are essential, but they serve different roles: rotation
+\emph{steers}, stretching \emph{selects}.
 \end{keyidea}
 
 \begin{mathbox}
@@ -1317,11 +2225,16 @@ plt.tight_layout()
 \end{lstlisting}
 
 \begin{finding}
-\textbf{Late layers are highly selective.}  The eigenvalue spectrum
-becomes increasingly peaked toward the output: a handful of directions
-carry most of the signal, while the rest are suppressed.  This
-is the metric factor implementing the model's ``decision'' about which
-information to propagate to the final prediction.
+\textbf{Late layers are highly selective} (observed in Qwen2.5-7B).
+The eigenvalue spectrum becomes increasingly peaked toward the output: a
+handful of directions carry most of the signal, while the rest are
+suppressed.  This is the metric factor implementing the model's ``decision'' about
+which information to propagate to the final prediction.  The reason is
+architectural: the logit for word $w$ is the dot product
+$W_{\mathrm{head}}[w] \cdot H^{(L-1)}$, so the final hidden state
+must point toward the correct vocabulary vector.  The peaked spectrum
+in late layers is the grade-0 mechanism that achieves this alignment
+--- amplifying the target direction while suppressing competitors.
 \end{finding}
 
 \begin{tryit}
@@ -1337,6 +2250,10 @@ information to propagate to the final prediction.
 
 \medskip
 \textbf{Sample output} (Qwen2.5-7B):
+
+\medskip
+\textbf{What to look for.}
+Early layers have near-uniform eigenvalue spectra (effective rank close to $k$, low condition number): they treat all directions roughly equally. The final layers show condition numbers exceeding $10^3$ and effective ranks below~10, funnelling almost all energy into a handful of directions. This is the grade-0 mechanism for ``choosing'' a prediction: amplify the winning directions, suppress everything else.
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch08_eigenvalue_spectra.pdf}
@@ -1369,8 +2286,7 @@ Two rotations applied in different orders can give different results.
 The \textbf{commutator} measures this failure to commute.  In GA, the
 commutator of two bivectors is itself a bivector --- telling you not just
 \emph{how much} the rotations fail to commute, but \emph{in which plane}
-the disagreement lives.  This is the Lie algebra of the rotation group,
-and it is the algebraic backbone of curvature and capacity.
+the disagreement lives.  This set of bivectors, together with the commutator operation, forms what mathematicians call a \textbf{Lie algebra} --- a collection of objects equipped with a bracket operation that measures how they interact. You do not need to know Lie theory; just think of it as `the space of all possible rotation generators, with a rule that tells you how rotations interfere with each other.' This algebraic structure is the backbone of curvature and capacity.
 \end{whycare}
 
 \section{The commutator as a bivector}
@@ -1388,6 +2304,7 @@ Key properties:
 \item \textbf{Self-commutator is zero}: $[B, B] = 0$.
 \item \textbf{Jacobi identity}:
   $[A,[B,C]] + [B,[C,A]] + [C,[A,B]] = 0$.
+  The Jacobi identity is a universal consistency constraint: the three ways of nesting commutators of any three bivectors must cancel. Think of it as a built-in sanity check --- if your numerical computation violates it, something has gone wrong.
 \end{enumerate}
 
 \begin{gabox}
@@ -1396,10 +2313,58 @@ Key properties:
 The set of all bivectors (skew-symmetric $k \times k$ matrices) forms a
 \textbf{Lie algebra} under the commutator bracket.  This is
 $\mathfrak{so}(k)$, the infinitesimal version of the rotation group.
+The notation $\mathfrak{so}(k)$ is standard shorthand for `the Lie algebra of rotations in $k$ dimensions.' You can read it as `the set of all $k \times k$ skew-symmetric matrices with the commutator as their bracket.' We include the name for completeness; you do not need it to follow the book.
 The commutator tells you how two infinitesimal rotations interact.  If
 $[B_1, B_2] = 0$, they commute (order does not matter).  If not, the
 commutator bivector names the plane of disagreement.
 \end{gabox}
+
+\section{Why commutators matter: the Baker--Campbell--Hausdorff formula}
+
+The commutator is not merely a mathematical curiosity.  It appears
+necessarily whenever you compose two rotations.  This is the content of
+the \textbf{Baker--Campbell--Hausdorff (BCH) formula}:
+
+\begin{gabox}
+\textbf{Baker--Campbell--Hausdorff formula.}
+Recall that the matrix exponential $\exp(B)$ turns a bivector (a rotation generator) into an actual rotation matrix. The BCH formula answers: if I compose two rotations, what single bivector generates the combined rotation?
+
+If $B_1$ and $B_2$ are bivectors, then the composed rotation
+$\exp(B_1)\exp(B_2) = \exp(B_{12})$ has the bivector whose exponential gives the combined rotation:
+\[
+  B_{12} = B_1 + B_2 + \tfrac{1}{2}[B_1, B_2]
+    + \tfrac{1}{12}\bigl([B_1, [B_1, B_2]] - [B_2, [B_1, B_2]]\bigr)
+    + \cdots
+\]
+The first two terms are the ``na\"ive sum''; all corrections involve
+commutators.
+\end{gabox}
+
+\paragraph{What this means in plain language.}
+When two layers rotate in the \emph{same} plane, their bivectors add
+and the commutator vanishes --- composing is simple.  When they rotate
+in \emph{different} planes, the commutator is the leading correction
+that tells you how the composed rotation differs from a na\"ive sum.
+The larger the commutator, the more the composition ``surprises'' you.
+
+\paragraph{Connection to the rotor field.}
+Recall from Chapter~\ref{chap:versor} that each layer transition has
+a bivector generator $\bivec{l}$.  If adjacent bivectors commute
+($[\bivec{l}, \bivec{l+1}] = 0$), the network could equivalently apply
+both rotations in a single step.  Non-zero commutators mean the
+\emph{order of layers matters} --- the network is doing genuinely
+sequential computation that cannot be parallelised.
+
+\paragraph{The Jacobi identity as a consistency check.}
+For any three bivectors, the \textbf{Jacobi identity} holds:
+\[
+  [A, [B, C]] + [B, [C, A]] + [C, [A, B]] = 0
+\]
+This is not a trivial sum: each term may be large.  The identity says
+these non-commutativities are constrained --- they cannot be
+independent.  You can verify this numerically as a sanity check on
+your computations.  It also means that the \emph{third} BCH correction
+term above is not free --- it is determined by lower-order commutators.
 
 \section{Computing commutators}
 
@@ -1440,10 +2405,12 @@ plt.title('Commutator Norm Heatmap')
 \end{lstlisting}
 
 \begin{finding}
-The commutator heatmap often shows \textbf{block structure}: groups of
-layers that strongly interact (high commutator norms between them) and
-groups that are nearly commutative (low norms).  This block structure
-varies with prompt type and model architecture.
+\textbf{Block structure in the commutator field} (observed in
+Qwen2.5-7B).
+The commutator heatmap shows block structure: groups of layers that
+strongly interact (high commutator norms between them) and groups that
+are nearly commutative (low norms).  This block structure varies with
+prompt type and may differ across model architectures.
 \end{finding}
 
 \begin{tryit}
@@ -1465,6 +2432,10 @@ varies with prompt type and model architecture.
 \item Self-commutator norm: $0.0$; Jacobi identity residual: $9.5 \times 10^{-17}$
 \end{itemize}
 
+\medskip
+\textbf{What this tells you.}
+The commutator norm $0.571$ means these two layer bivectors are significantly non-commuting --- applying their rotations in different orders produces meaningfully different outcomes. The zero self-commutator and machine-precision Jacobi residual are sanity checks confirming the algebra is consistent. In the heatmap below, look for off-diagonal blocks of high commutator norm: these identify groups of layers whose rotations interfere with each other and therefore perform jointly non-trivial computation.
+
 \begin{center}
 \includegraphics[width=0.6\linewidth]{figures_ga_learning/ch09_commutator_heatmap.pdf}
 \captionof{figure}{Commutator norm $\|[B_i, B_j]\|_F$ for all layer pairs
@@ -1480,9 +2451,7 @@ interact non-commutatively.}
 % ══════════════════════════════════════════════════════════════════════════════
 
 \begin{whycare}
-Holonomy is the most elegant concept in differential geometry: transport
-a vector around a closed loop and see if it comes back unchanged.  If
-not, the space is curved.  In our setting, the ``space'' is the
+Here is a simple test for curvature: pick up a vector, carry it around a closed loop following the local rotation rules, and check whether it comes back unchanged. If it does not, the space is curved at that loop. This idea is called \textbf{holonomy}.  In our setting, the ``space'' is the
 layer--time grid, the ``transport'' is done by rotors, and the holonomy
 rotor's bivector points in the \emph{direction} of curvature.
 \end{whycare}
@@ -1493,8 +2462,8 @@ The layer--time grid has two axes: layer ($l$) and token ($t$).  At each
 grid point, there are two ways to move: up one layer, or right one token.
 Each move applies a local rotor.
 
-To test for curvature at a \textbf{plaquette} $(l, t)$ (the unit square
-from $(l,t)$ to $(l+1, t+1)$), compose rotors around the loop:
+To test for curvature at a grid cell (called a \emph{plaquette} in physics) $(l, t)$ (the unit square
+from $(l,t)$ to $(l+1, t+1)$), compose rotors around the loop ($\rightarrow$ means one step along the token axis, $\uparrow$ means one step along the layer axis):
 \[
   R_{\text{loop}} = R_{\rightarrow}^{(l+1)} \gp
     (R_{\uparrow}^{(t+1)})^{-1} \gp
@@ -1516,15 +2485,199 @@ then token'' vs.\ ``token first, then layer,'' the grid is curved at
 that plaquette.
 \end{analogy}
 
+% ── Figure: Parallel transport and holonomy on the grid ────────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  vec/.style={->, line width=1.2pt},
+  gridnode/.style={circle, fill=#1, inner sep=2.5pt},
+  gridedge/.style={line width=0.7pt, DGray!40},
+  transport/.style={->, line width=1.6pt, #1},
+  lbl/.style={font=\small},
+]
+
+% ── Panel A: The grid with loop ──
+\begin{scope}[shift={(-5.0,0)}]
+  \node[font=\small\bfseries, Navy] at (1.8,4.4) {(a)\; The layer--token grid};
+
+  % Grid lines
+  \foreach \y in {0,...,3} {
+    \draw[gridedge] (0,\y) -- (3.6,\y);
+  }
+  \foreach \x in {0,...,3} {
+    \draw[gridedge] (\x*1.2,0) -- (\x*1.2,3);
+  }
+
+  % Grid nodes
+  \foreach \x in {0,...,3} {
+    \foreach \y in {0,...,3} {
+      \node[gridnode=DGray!50] at (\x*1.2, \y) {};
+    }
+  }
+
+  % Highlight plaquette (1,1) to (2,2)
+  \fill[Teal!15] (1.2,1) rectangle (2.4,2);
+  \draw[Teal, line width=1.2pt] (1.2,1) rectangle (2.4,2);
+
+  % Highlighted corner nodes
+  \node[gridnode=Navy] at (1.2,1) {};
+  \node[gridnode=Navy] at (2.4,1) {};
+  \node[gridnode=Navy] at (2.4,2) {};
+  \node[gridnode=Navy] at (1.2,2) {};
+
+  % Corner labels
+  \node[below left, font=\scriptsize, Navy] at (1.2,1) {$(l,t)$};
+  \node[below right, font=\scriptsize, Navy] at (2.4,1) {$(l,t\!+\!1)$};
+  \node[above right, font=\scriptsize, Navy] at (2.4,2) {$(l\!+\!1,t\!+\!1)$};
+  \node[above left, font=\scriptsize, Navy] at (1.2,2) {$(l\!+\!1,t)$};
+
+  % Axis labels
+  \draw[vec, DGray] (-0.4,-0.3) -- (3.8,-0.3)
+    node[right, font=\scriptsize, DGray] {token $t$};
+  \draw[vec, DGray] (-0.4,-0.3) -- (-0.4,3.3)
+    node[above, font=\scriptsize, DGray] {layer $l$};
+
+  % Label
+  \node[font=\scriptsize, DGray] at (1.8, -0.9)
+    {plaquette = one grid cell};
+\end{scope}
+
+% ── Panel B: Transport around the loop ──
+\begin{scope}[shift={(1.4,0)}]
+  \node[font=\small\bfseries, Navy] at (2.2,4.4) {(b)\; Transport around the loop};
+
+  % The four corners (larger spacing)
+  \coordinate (BL) at (0.2,0.5);   % (l,t)
+  \coordinate (BR) at (4.2,0.5);   % (l,t+1)
+  \coordinate (TR) at (4.2,3.5);   % (l+1,t+1)
+  \coordinate (TL) at (0.2,3.5);   % (l+1,t)
+
+  % Corner nodes
+  \node[gridnode=Navy] at (BL) {};
+  \node[gridnode=Navy] at (BR) {};
+  \node[gridnode=Navy] at (TR) {};
+  \node[gridnode=Navy] at (TL) {};
+
+  % Corner labels
+  \node[below left, font=\scriptsize, Navy] at (BL) {$(l,t)$};
+  \node[below right, font=\scriptsize, Navy] at (BR) {$(l,t\!+\!1)$};
+  \node[above right, font=\scriptsize, Navy] at (TR) {$(l\!+\!1,t\!+\!1)$};
+  \node[above left, font=\scriptsize, Navy] at (TL) {$(l\!+\!1,t)$};
+
+  % Path 1 arrows (right then up) -- solid
+  \draw[transport=Teal] ([yshift=-3pt]BL) -- ([yshift=-3pt]BR)
+    node[midway, below=4pt, font=\scriptsize, Teal]
+    {$R_{\rightarrow}^{(l)}$};
+  \draw[transport=Teal] ([xshift=3pt]BR) -- ([xshift=3pt]TR)
+    node[midway, right=4pt, font=\scriptsize, Teal]
+    {$R_{\uparrow}^{(t+1)}$};
+
+  % Path 2 arrows (up then right) -- dashed
+  \draw[transport=Purple, densely dashed]
+    ([xshift=-3pt]BL) -- ([xshift=-3pt]TL)
+    node[midway, left=4pt, font=\scriptsize, Purple]
+    {$R_{\uparrow}^{(t)}$};
+  \draw[transport=Purple, densely dashed]
+    ([yshift=3pt]TL) -- ([yshift=3pt]TR)
+    node[midway, above=4pt, font=\scriptsize, Purple]
+    {$R_{\rightarrow}^{(l+1)}$};
+
+  % Path labels
+  \node[font=\scriptsize, Teal, text width=2.8cm, align=center]
+    at (3.6, -0.2) {Path 1: token first};
+  \node[font=\scriptsize, Purple, text width=2.8cm, align=center]
+    at (0.8, -0.2) {Path 2: layer first};
+
+  % Initial vector at BL
+  \draw[->, DGreen, line width=1.8pt] ([shift={(0.12,0.12)}]BL)
+    -- ++(0.6,0.4) node[right, font=\scriptsize, DGreen] {$v$};
+\end{scope}
+
+% ── Panel C: Holonomy result ──
+\begin{scope}[shift={(8.0,0.5)}]
+  \node[font=\small\bfseries, Navy] at (1.6,3.9)
+    {(c)\; Holonomy};
+
+  % Two vectors from same origin
+  \coordinate (O) at (1.2,1.5);
+
+  % Initial vector (transported via path 1)
+  \draw[->, Teal, line width=1.8pt] (O) -- ++(1.4,0.9)
+    node[right, font=\scriptsize, Teal] {$v_{\text{path 1}}$};
+
+  % Final vector (transported via path 2)
+  \draw[->, Purple, line width=1.8pt] (O) -- ++(0.5,1.5)
+    node[above, font=\scriptsize, Purple] {$v_{\text{path 2}}$};
+
+  % Angle arc
+  \draw[DRed, thick, ->] ([shift={(40:0.7)}]O)
+    arc[start angle=40, end angle=72, radius=0.7]
+    node[midway, right=2pt, font=\scriptsize, DRed] {$\Delta\theta$};
+
+  % Annotation
+  \node[draw=DRed, rounded corners=3pt, fill=LRed,
+    inner sep=5pt, font=\scriptsize, text width=2.8cm, align=center]
+    at (1.6, -0.3)
+    {$R_{\text{loop}} \neq I$\\[2pt]
+    curvature $= \|\Omega\|_F$\\[1pt]
+    direction $= \log R_{\text{loop}}$};
+\end{scope}
+\end{tikzpicture}
+
+\caption{Parallel transport and holonomy on the layer--token grid.
+\textbf{(a)}~The hidden-state field lives on a 2D grid with layers
+(vertical) and token positions (horizontal).  A plaquette is one grid
+cell.
+\textbf{(b)}~A vector~$v$ at $(l,t)$ is transported along two
+different paths to $(l\!+\!1, t\!+\!1)$: ``token first, then layer''
+(solid, teal) vs.\ ``layer first, then token'' (dashed, purple).
+Each edge applies a local rotor.
+\textbf{(c)}~If the two paths disagree, the vector arrives at
+different orientations.  The residual rotation $R_{\text{loop}}$ is
+the holonomy --- a direct measure of curvature.  Its magnitude gives
+\emph{how much} curvature; its bivector $\log R_{\text{loop}}$ gives
+\emph{which plane} is curved.}
+\label{fig:holonomy}
+\end{figure}
+
+Curvature arises when transformations depend on the path taken.
+In the transformer, moving across tokens and then across layers is
+not the same as moving across layers and then across tokens.  This
+non-commutativity produces a residual rotation --- the holonomy ---
+which captures how much the model's computation bends or twists
+across the grid.
+
+\begin{transformer}
+In transformer models, high-curvature regions often correspond to
+tokens where the model integrates multiple sources of context or
+resolves competing signals.  These are the points where ``reasoning''
+happens --- where the representation cannot be updated independently
+along a single axis.  The holonomy is governed by the commutator:
+when layer and token transformations commute, curvature is zero;
+when they do not, curvature appears.  This construction is the
+discrete analogue of curvature in differential geometry: the failure
+of parallel transport to return a vector unchanged.
+\end{transformer}
+
+The curvature bivector at each plaquette is:
+\[
+  \Omega(l,t) = \log R_{\text{loop}}(l,t)
+\]
+This is the full geometric object: its norm is the curvature magnitude,
+and its principal planes reveal \emph{which} dimensions of representation
+space are curved.
+
 \section{The holonomy rotor}
 
 If $R_{\text{loop}} = I$ (identity rotor), the plaquette is flat.
 Otherwise:
 \begin{itemize}[nosep]
-\item $\|R_{\text{loop}} - I\|_F$ = \textbf{scalar curvature}
-  (a number).
+\item $\|R_{\text{loop}} - I\|_F$ = \textbf{curvature magnitude}
+  (a single number measuring curvature; we use `scalar curvature' informally --- this is not the Ricci scalar of Riemannian geometry).
 \item $\log(R_{\text{loop}})$ = \textbf{curvature bivector}
   (an oriented plane --- \emph{which} plane is curved).
+  The matrix logarithm recovers the bivector that generates this loop rotation --- it tells you \emph{which plane} is curved.
 \end{itemize}
 
 \begin{keyidea}
@@ -1553,19 +2706,91 @@ print(f"Shape: {holo_map.shape}")  # (L-1, T-1)
 \section{Curvature patterns in transformers}
 
 \begin{finding}
-\textbf{Curvature concentrates in the final layers.}  The last 3--5
-layers contain 60--80\% of the total curvature.  This is where the
-model's computation is most non-trivial: the layer and token axes
-interact strongly as the model converges to a prediction.
+\textbf{Curvature concentrates in the final layers} (observed in
+Qwen2.5-7B).  The last 3--5 layers contain 60--80\% of the total
+curvature.  This suggests that the model's most non-trivial computation
+--- where layer and token axes interact strongly --- occurs as it
+converges to a prediction.
 \end{finding}
 
 \begin{finding}
-\textbf{Curvature planes vary across tokens.}  At a fixed layer, the
-holonomy bivector can point in different directions for different
-tokens.  This means the model processes each token through a
-\emph{different} curved region of representation space --- a form of
-token-specific computation.
+\textbf{Curvature planes vary across tokens} (observed in Qwen2.5-7B).
+At a fixed layer, the holonomy bivector can point in different
+directions for different tokens.  This is consistent with the model
+processing each token through a \emph{different} curved region of
+representation space --- a form of token-specific computation.
 \end{finding}
+
+\section{The nonseparability index}
+
+The holonomy map gives curvature at every plaquette.  To summarise the
+\emph{total} amount of non-trivial computation in a single number,
+sum it up:
+
+\begin{gabox}
+\textbf{Nonseparability index.}
+\[
+  \mathcal{D}(s) = \sum_{l=0}^{L-2}\sum_{t=0}^{T-2}
+    \|\Omega^{(l,t)}\|_F
+\]
+where $\Omega^{(l,t)} = R_{\mathrm{loop}}^{(l,t)} - I$ is the
+holonomy operator at plaquette $(l, t)$.
+\end{gabox}
+
+Think of $\mathcal{D}(s)$ as a ``total curvature budget.''  If
+$\mathcal{D}(s) = 0$, the hidden-state field is \emph{separable}: the
+layer transformations and token transformations are independent, and the
+model is doing a simple lookup.  In other words, `separable' means you could factor the full transformation as a product of a layer-only part and a token-only part, with no interaction --- like a function $f(x,y) = g(x) \cdot h(y)$.  If $\mathcal{D}(s) > 0$, the model is
+performing genuinely interactive computation --- the kind where \emph{which
+token you are} changes \emph{what the layer does}.
+
+The normalised version $\bar{\mathcal{D}}(s) = \mathcal{D}(s) /
+((L-1)(T-1))$ is the mean curvature per plaquette, which is comparable
+across prompts of different lengths.
+
+\begin{lstlisting}[caption={Computing the nonseparability index}]
+# From a holonomy map (L-1, T-1)
+holo_map = result.holonomy_map
+D_total = holo_map.sum()    # nonseparability index
+D_mean = holo_map.mean()    # mean curvature per plaquette
+print(f"Total nonseparability: {D_total:.2f}")
+print(f"Mean curvature/plaquette: {D_mean:.4f}")
+\end{lstlisting}
+
+\section{Curvature regimes}
+
+Different prompts produce different curvature landscapes.  It is useful
+to classify these into regimes, because each regime tells you something
+qualitatively different about what the model is doing:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{} l l l @{}}
+\toprule
+\textbf{Regime} & \textbf{Holonomy signature} & \textbf{Interpretation} \\
+\midrule
+\textbf{Flat} & $\|\Omega\| \approx 0$ everywhere
+  & Separable; simple lookup or memorisation \\
+\textbf{Low curvature} & $\|\Omega\|$ small, smooth
+  & Weakly interactive; straightforward recall \\
+\textbf{High curvature} & $\|\Omega\|$ large, structured
+  & Strongly interactive; multi-step reasoning \\
+\textbf{Chaotic} & $\mathrm{Var}(\|\Omega\|) \gg 0$
+  & Unstable; potential hallucination \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}
+The curvature regime is a \emph{geometric} signature of the model's
+computational strategy.  \textbf{Flat} means no interaction.
+\textbf{High curvature} means the model is working hard --- but whether
+that work is productive depends on whether the curvature is
+\emph{structured} (concentrated in a few plaquettes and planes) or
+\emph{chaotic} (scattered with high variance).
+Chapter~\ref{chap:applications} uses these regimes to distinguish
+factual reasoning from hallucination.
+\end{keyidea}
 
 \begin{tryit}
 \textbf{Notebook: Chapter 10.}
@@ -1581,6 +2806,10 @@ token-specific computation.
 \medskip
 \textbf{Sample output} (Qwen2.5-7B, 14-token prompt):
 Peak curvature at layer~26 (mean curvature $= 2.46$).
+
+\medskip
+\textbf{What this tells you.}
+High curvature at the final layers means the rotor field is most ``twisted'' where the model makes its prediction. Transporting a vector around a layer-token loop at this point returns it substantially rotated, indicating that the network's layer and token transformations are strongly coupled. This is a signature of active computation: the model is not just passing information through but actively reshaping it in a way that depends jointly on layer depth and token position.
 
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch10_holonomy.pdf}
@@ -1612,7 +2841,7 @@ layers:
 \]
 
 Each term measures how much layers $l$ and $l+1$ fail to commute.  If
-all layers commuted perfectly (a flat connection), $C_{\mathrm{acc}} = 0$.
+all layers commuted perfectly --- meaning the rotations could be applied in any order without changing the result --- then $C_{\mathrm{acc}} = 0$.
 Higher values mean more complex geometric transformation.
 
 \section{Dependency weighting}
@@ -1642,8 +2871,7 @@ for i, p in enumerate(planes['principal_planes']):
 \end{lstlisting}
 
 If most capacity is concentrated in a few planes, the model's
-computation is ``low-rank'' in the bivector sense: it uses only a few
-planes of rotation.  If capacity is spread, the computation is
+computation is concentrated in just a few rotation planes --- analogous to how a low-rank matrix has only a few significant singular values.  If capacity is spread, the computation is
 high-dimensional.
 
 \begin{gabox}
@@ -1657,11 +2885,12 @@ decomposition.
 \end{gabox}
 
 \begin{finding}
-\textbf{Distilled models concentrate capacity in fewer planes.}  The
-DeepSeek-R1-Distill model focuses its non-commutativity in fewer
-principal planes than the base Qwen model of the same size.
-Distillation appears to ``clean up'' the rotation structure by removing
-non-commutativity in planes that do not contribute to performance.
+\textbf{Distilled models concentrate capacity in fewer planes}
+(observed in DeepSeek-R1-Distill-Qwen-7B vs.\ Qwen2.5-7B).
+The distilled model focuses its non-commutativity in fewer principal
+planes than the base model of the same size.  This is consistent with
+distillation ``cleaning up'' the rotation structure, though whether this
+generalises beyond this model pair is an open question.
 \end{finding}
 
 \begin{tryit}
@@ -1678,6 +2907,10 @@ non-commutativity in planes that do not contribute to performance.
 \medskip
 \textbf{Sample output} (Qwen2.5-7B):
 $C_{\mathrm{acc}} = 3771.3$, concentration $= 0.205$.
+
+\medskip
+\textbf{What this tells you.}
+The accumulated capacity $C_{\mathrm{acc}} = 3771.3$ sums the non-commutativity across all adjacent layer pairs --- it is the network's total ``geometric work.'' The concentration of $0.205$ (on a 0-to-1 scale, where 1 means all capacity sits in a single layer pair) tells us computation is moderately distributed: no single transition dominates, but the load is far from uniform. The plot below reveals which transitions carry disproportionate weight, identifying the computational bottlenecks.
 
 \begin{center}
 \includegraphics[width=0.8\linewidth]{figures_ga_learning/ch11_capacity.pdf}
@@ -1715,6 +2948,7 @@ output logits with respect to the hidden state:
 \[
   D_l = \left\|\frac{\partial s}{\partial H^{(l)}}\right\|_F
 \]
+In words: $D_l$ measures how sensitive the model's final prediction is to small changes in the hidden state at layer~$l$. Large $D_l$ means the output depends strongly on what happens at that layer.
 
 This is a scalar per layer.  It does not depend on GA --- it is a
 standard gradient computation.
@@ -1734,7 +2968,8 @@ work} at layer $l$.  It combines ``how much the model cares'' with
 ``how much the layer rotates.''
 
 \begin{finding}
-\textbf{Peak effective work does not coincide with peak rotation.}
+\textbf{Peak effective work does not coincide with peak rotation}
+(observed in Qwen2.5-7B).
 The most geometrically active layer (highest $\theta$) is often
 \emph{not} the most important layer (highest $D_l$).  Effective work
 identifies the layers that are both active and important.
@@ -1764,9 +2999,10 @@ for l in top_layers:
 \end{lstlisting}
 
 \begin{transformer}
-This is the ultimate diagnostic: a list of specific layers and specific
-planes that drive the model's output.  If you want to steer the model's
-behavior, intervene at these layers, in these planes.  If you want to
+Effective work gives a ranked list of specific layers and specific
+planes that drive the model's output for a given prompt.  If you want
+to steer the model's behavior, these are the candidate intervention
+points.  If you want to
 understand a failure, look at what these planes are doing.
 \end{transformer}
 
@@ -1787,6 +3023,10 @@ $D_{\mathrm{total}} = 1.74$, entropy $= 2.61$.
 Top-3 effective-work layers: 0, 1, 2 --- the earliest layers carry the
 heaviest dependency-weighted rotation.
 
+\medskip
+\textbf{What this tells you.}
+The total dependency $D_{\mathrm{total}} = 1.74$ measures the output's overall gradient sensitivity across all layers. The entropy of $2.61$ (out of a maximum of $\ln(28) \approx 3.33$ for 28 layers) indicates that sensitivity is spread across many layers but not uniformly. The surprise is that the top effective-work layers are 0, 1, and 2: the model's output depends most on the rotations in its very first layers, where the geometric reorientation is largest.
+
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch12_dependency.pdf}
 \captionof{figure}{Left: dependency $D_l$ (bars) and rotor angle (line).
@@ -1806,7 +3046,7 @@ problems: detecting when a model ignores context, diagnosing
 hallucinations, and steering model behavior via plane-specific
 interventions.  Each application uses the full GA toolkit --- bivectors,
 holonomy, commutators, dependency --- and introduces new mathematical
-objects (the Cayley bivector, the directional--radial decomposition)
+objects (the Cayley bivector (a matrix encoding how context rotates the model's representation) and the directional--radial decomposition (splitting any change into a direction change and a magnitude change))
 that connect GA to modern interpretability research.
 \end{whycare}
 
@@ -1861,6 +3101,7 @@ For normalised vectors $u_\pi, v_q \in \mathbb{R}^k$:
 This is a skew-symmetric matrix --- a bivector in $\mathrm{Cl}(k, 0)$
 --- encoding both the \emph{magnitude} and \emph{direction} of context
 influence.
+Any skew-symmetric matrix can be identified with a bivector: its entries encode the coefficients of basis planes $e_i \wedge e_j$, exactly as introduced in Chapter~3.
 \end{gabox}
 
 The \textbf{steering magnitude} is the Frobenius norm:
@@ -1941,10 +3182,56 @@ cos_sim /= (hr1.bivector.norm * hr2.bivector.norm + 1e-12)
 # Low similarity => model IS using context (different curvature plane)
 \end{lstlisting}
 
+\subsection{Experiment: context detection on Qwen2.5-7B}
+
+We run the Cayley bivector analysis on two prompts:
+\begin{itemize}[nosep]
+\item \textbf{Bare}: ``What is the capital of France''
+\item \textbf{With context}: ``Paris is the largest city in France and
+  serves as its capital.\ What is the capital of France''
+\end{itemize}
+For each layer $l$, we extract the last-token hidden state from both
+runs, $\ell_2$-normalise, and compute the Cayley bivector $A^{(l)}$
+and its magnitude $\tau^{(l)} = \|A^{(l)}\|_F$.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}r r r r@{}}
+\toprule
+\textbf{Layer} & $\tau$ & $\theta$ (degrees) & $\cos(u_\pi, v_q)$ \\
+\midrule
+0 & 0.000 & 0.0 & 1.000 \\
+7 & 0.259 & 20.7 & 0.935 \\
+14 & 0.396 & 31.3 & 0.855 \\
+18 (peak) & 0.470 & 36.5 & 0.804 \\
+21 & 0.436 & 34.2 & 0.827 \\
+27 & 0.309 & 24.7 & 0.909 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=0.8\linewidth]{figures_ga_learning/ch13_cayley_tau.pdf}
+\captionof{figure}{Steering magnitude $\tau$ across layers.  The context
+shifts the representation most strongly at layer~18 ($\tau = 0.47$),
+well above the vibe threshold $\tau = 0.05$.  Layer~0 shows $\tau = 0$
+because both prompts share the same initial embedding.}
+\end{center}
+
+\textbf{Interpretation.}
+All $\tau$ values are far above the vibe threshold of $0.05$, confirming
+the model \emph{is} using context.  The steering magnitude peaks at
+layer~18 ($\theta = 36.5^\circ$) --- the model's representation shifts
+most strongly in the middle-to-late layers.  The Cayley bivector at the
+peak layer decomposes into a dominant principal plane with angle $0.33$
+rad, identifying the specific 2D subspace where context rotates the
+representation.
+
 \begin{finding}
 \textbf{Curvature plane shift is a stronger indicator than magnitude
-change.}  Scalar curvature magnitude may change by only 10--20\%, but
-the \emph{direction} of curvature can shift substantially, indicating
+change} (observed in this example).  Scalar curvature magnitude may
+change by only 10--20\%, but the \emph{direction} of curvature can
+shift substantially, indicating
 qualitatively different computation.  This is information that scalar
 summaries cannot provide --- only the bivector direction reveals it.
 \end{finding}
@@ -1959,7 +3246,7 @@ summaries cannot provide --- only the bivector direction reveals it.
 Chain-of-thought prompting can fail in two geometrically distinct ways:
 
 \begin{enumerate}[nosep]
-\item \textbf{Aleatoric confusion}: The model generates multiple
+\item \textbf{Genuine uncertainty (sometimes called \emph{aleatoric} confusion)}: The model generates multiple
   reasoning paths that reach contradictory conclusions.  This is
   visible as high variability in the bivector directions between
   sampled chains.
@@ -2001,30 +3288,156 @@ the bivector, distinguishes these two cases.
 
 \subsection{Hallucination signatures in the GA profile}
 
-Hallucinations are associated with ``busy but useless'' layers: high
-geometric activity (curvature, rotation) but low dependency.  GA
-provides plane-level diagnostics:
+We hypothesise that hallucinations are associated with ``busy but
+useless'' layers: high geometric activity (curvature, rotation) but low
+dependency.  If this hypothesis holds, GA provides plane-level
+diagnostics that scalar summaries cannot:
 
 \begin{itemize}[nosep]
-\item \textbf{Consistent curvature plane}: the model is ``confidently
-  wrong'' --- it performs systematic but misdirected computation.
-  The holonomy bivector at high-activity layers points in a consistent
-  direction across tokens.
-\item \textbf{Random curvature planes}: the model is ``lost'' ---
+\item \textbf{Consistent curvature plane}: the model may be
+  ``confidently wrong'' --- performing systematic but misdirected
+  computation.  The holonomy bivector at high-activity layers would
+  point in a consistent direction across tokens.
+\item \textbf{Random curvature planes}: the model may be ``lost'' ---
   curvature directions vary across tokens without coherent structure.
-  The holonomy bivectors have low pairwise similarity.
+  The holonomy bivectors would have low pairwise similarity.
 \end{itemize}
 
+The following experiment tests this hypothesis on a single model
+and pair of prompts.  Broader validation across models, prompt types,
+and evaluation benchmarks is needed to establish these as reliable
+diagnostics.
+
+\subsection{Experiment: factual vs.\ confabulation prompt}
+
+We compare the full GA profile for two prompts on Qwen2.5-7B:
+\begin{itemize}[nosep]
+\item \textbf{Factual}: ``The Eiffel Tower is a wrought iron lattice
+  tower in Paris France''
+\item \textbf{Confabulation}: ``The underwater city of Atlantis was
+  discovered in 2019 near the coast of''
+\end{itemize}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}l r r@{}}
+\toprule
+\textbf{Metric} & \textbf{Factual} & \textbf{Confabulation} \\
+\midrule
+Mean rotation angle & 6.78 & 7.50 \\
+Max rotation angle & 8.85 & 9.96 \\
+$D_{\text{total}}$ & 3.13 & 0.75 \\
+$H(D)$ (entropy) & 2.04 & 2.36 \\
+$C_{\text{acc}}$ & 7587 & 8826 \\
+Concentration & 0.221 & 0.216 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=0.95\linewidth]{figures_ga_learning/ch13_hallucination.pdf}
+\captionof{figure}{Geometric profile comparison: factual (blue) vs.\
+confabulation (red).  Top-left: the confabulation prompt produces
+\emph{larger} rotation angles.  Top-right: but \emph{much smaller}
+dependency --- the model does not rely on these rotations.  Bottom-left:
+effective work is concentrated in layer~0 for the factual prompt.
+Bottom-right: capacity is higher for confabulation.}
+\end{center}
+
+\textbf{Interpretation.}
+The confabulation prompt has \textbf{higher geometric activity}
+(mean rotation $7.50$ vs $6.78$, capacity $8826$ vs $7587$) but
+\textbf{4$\times$ lower dependency} ($D_{\text{total}} = 0.75$ vs
+$3.13$).  This is the ``busy but useless'' signature: the model's
+internal rotations are large and complex, but the output barely
+depends on them.  The model is churning through representations
+without arriving at a grounded answer.
+
+The factual prompt concentrates effective work in the earliest layers
+--- the model quickly builds a confident representation.  The
+confabulation prompt spreads computation more evenly (higher entropy
+$2.36$ vs $2.04$), indicating the model never settles on a coherent
+geometric path.
+
 \begin{finding}
-\textbf{Metric anisotropy complements rotational diagnostics.}
-The condition number $\kappa_G$ of the Gram matrix
-$G_{ij} = v_i^\top v_j$ measures spectral concentration.  When the
-model succeeds, reasoning paths are spectrally concentrated (low
-effective rank); when it fails, paths scatter more diffusely.  High
-$\kappa_G$ with low $\mathcal{C}$ is a \emph{warning sign}: the
-apparent consistency may be a metric artefact rather than genuine
-agreement.
+\textbf{Metric anisotropy complements rotational diagnostics}
+(observed in this example).
+The condition number $\kappa_G$ is the ratio of the largest to smallest eigenvalue of the Gram matrix $G_{ij} = v_i^\top v_j$. A large $\kappa_G$ means the reasoning paths are concentrated in a thin, elongated region rather than a round cloud. It measures spectral concentration.  In
+Qwen2.5-7B, factual prompts produce more spectrally concentrated
+paths (low effective rank) than confabulations.  High $\kappa_G$ with
+low $\mathcal{C}$ would be a \emph{warning sign}: apparent consistency
+that may be a metric artefact rather than genuine agreement.  Whether
+these patterns generalise requires further investigation.
 \end{finding}
+
+\subsection{The Binet--Cauchy cosine: detecting causal inversions}
+
+Bivector coherence tells you whether reasoning \emph{paths} agree with
+each other.  But a model can also fail in a subtler way: the logical
+\emph{direction} of reasoning can be reversed --- a conclusion appears
+before its premise, or a cause follows its effect.  This is a
+\textbf{causal inversion}, and detecting it requires an oriented
+measure.
+
+The \textbf{Binet--Cauchy cosine} (BCcos) provides exactly this.
+Consider two pairs of unit vectors:
+\begin{itemize}[nosep]
+\item $(u_i, u_{i+1})$: consecutive reasoning-step embeddings
+  (the model's trajectory).
+\item $(c_q, c_{\text{ctx}})$: query and context direction
+  (the expected flow of information).
+\end{itemize}
+
+Form the $2 \times 2$ matrix of their inner products:
+\[
+  S = \begin{pmatrix}
+    u_i^\top c_q & u_i^\top c_{\text{ctx}} \\
+    u_{i+1}^\top c_q & u_{i+1}^\top c_{\text{ctx}}
+  \end{pmatrix}
+\]
+
+\begin{gabox}
+\textbf{Binet--Cauchy cosine.}
+\[
+  \text{BCcos}(u_i, u_{i+1}; c_q, c_{\text{ctx}})
+  = \frac{\det S}{\|u_i \op u_{i+1}\| \; \|c_q \op c_{\text{ctx}}\|
+    + \epsilon}
+\]
+The numerator $\det S$ is a \textbf{signed oriented area}: it equals
+the inner product between the bivectors $u_i \op u_{i+1}$ and
+$c_q \op c_{\text{ctx}}$.  The denominator normalises by the product
+of their areas.
+\end{gabox}
+
+\paragraph{Why this is a GA concept.}
+The determinant $\det S = (u_i^\top c_q)(u_{i+1}^\top c_{\text{ctx}})
+- (u_i^\top c_{\text{ctx}})(u_{i+1}^\top c_q)$ is precisely the
+the inner product between two bivectors --- measuring how much two planes overlap, with a sign reflecting whether they are oriented the same way:
+$\langle u_i \op u_{i+1}, \, c_q \op c_{\text{ctx}} \rangle$.  In
+GA language, BCcos measures whether the \emph{plane of the model's
+reasoning trajectory} is aligned with the \emph{plane of the expected
+information flow}.
+
+\paragraph{Three regimes of BCcos.}
+\begin{itemize}[nosep]
+\item \textbf{BCcos $\approx +1$}: the reasoning trajectory is aligned
+  with the expected information flow (correct causal direction).
+\item \textbf{BCcos $\approx 0$}: the trajectory is orthogonal to
+  the expected flow (irrelevant computation).
+\item \textbf{BCcos $\ll 0$ (strongly negative)}: the trajectory is
+  \emph{reversed} --- a causal inversion.  The model's reasoning
+  flows opposite to the expected direction.
+\end{itemize}
+
+\begin{keyidea}
+Cosine similarity can tell you whether two vectors are aligned, but it
+cannot detect \emph{causal inversions} --- for that, you need an
+\textbf{oriented} measure that is sensitive to the \emph{order} of the
+vectors.  The determinant of $S$ provides this orientation through the
+wedge product.  This is information that no scalar similarity measure
+can capture.
+The key intuition: swapping two vectors in a wedge product flips the sign ($a \wedge b = -(b \wedge a)$). So if the model's reasoning goes opposite to what the context expects, the signed area becomes negative. Cosine similarity cannot detect this reversal; the Binet--Cauchy cosine can.
+\end{keyidea}
 
 % ────────────────────────────────────────────────────────────────────
 \section{Application 3: Plane-specific steering}
@@ -2033,7 +3446,7 @@ agreement.
 
 \subsection{The directional--radial decomposition}
 
-Every whitened hidden state admits a polar factorisation:
+Every whitened hidden state admits a polar factorisation (splitting a vector into its length~$r$ and its unit direction~$\hat{H}$, just as a complex number can be written as $r e^{i\theta}$):
 \[
   \widetilde{H}^{(l,t)} = r^{(l,t)} \, \hat{H}^{(l,t)},
   \qquad \|\hat{H}^{(l,t)}\| = 1
@@ -2051,10 +3464,7 @@ $\|\delta\|^2 = \|\delta_{\text{angular}}\|^2 +
 \|\delta_{\text{radial}}\|^2$.
 
 \begin{transformer}
-The angular component corresponds to \textbf{grade-2} (rotation)
-and the radial component to \textbf{grade-0} (scaling).  This
-decomposition is the single-vector analogue of the versor decomposition
-$T^{(l)} = \rotor{l}\metric{l}$ from Chapter~\ref{chap:versor}.
+The angular component changes \emph{which direction} the vector points (a rotation, grade-2). The radial component changes \emph{how long} the vector is (a scaling, grade-0). This is the single-vector version of the versor decomposition from Chapter~\ref{chap:versor}: $T^{(l)} = \rotor{l}\metric{l}$.
 \end{transformer}
 
 \subsection{Why the rotation plane matters}
@@ -2089,7 +3499,7 @@ convert angular perturbations into radial ones.  Over 28 layers,
 purely angular purity degrades substantially.  Dense addition, which
 appears geometrically crude, can achieve higher end-to-end angular
 purity because $|v^\top \hat{H}| \sim \mathcal{O}(1/\sqrt{k})$ in
-high dimensions, making the perturbation naturally tangential.
+high dimensions (because a random vector in $k$ dimensions is nearly perpendicular to any fixed direction --- the expected dot product shrinks as $1/\sqrt{k}$), making the perturbation naturally tangential.
 \end{pitfall}
 
 \subsection{The steering recipe}
@@ -2130,6 +3540,52 @@ for l in top_layers:
     # plane['eigvecs'] gives the 2D subspace for intervention
 \end{lstlisting}
 
+\subsection{Experiment: identifying steering targets}
+
+Running the steering recipe on Qwen2.5-7B with the factual prompt:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}r r r r r@{}}
+\toprule
+\textbf{Layer} & $D_l$ & $\theta^{(l)}$ &
+  $D_l \times \theta^{(l)}$ & \textbf{Top plane angle} \\
+\midrule
+0 & 1.786 & 8.831 & 15.769 & 3.131 \\
+1 & 0.106 & 8.845 & 0.935 & 3.135 \\
+2 & 0.090 & 7.948 & 0.717 & 3.131 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Layer~0 dominates overwhelmingly: its effective work ($15.8$) is
+$17\times$ larger than layer~1's ($0.94$).  This layer is the primary
+steering target.
+
+\paragraph{Plane independence.}
+The bivector similarity between the top-3 layers is near zero:
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}l r@{}}
+\toprule
+\textbf{Layer pair} & \textbf{Bivector similarity} \\
+\midrule
+Layers 0 vs 1 & $+0.005$ \\
+Layers 0 vs 2 & $+0.027$ \\
+Layers 1 vs 2 & $-0.026$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Interpretation.}
+The near-zero similarities confirm that each layer rotates in an
+essentially \emph{independent} plane.  Steering at layer~0 will not
+interfere with the rotation at layers 1 or 2.  At each target layer,
+the top-3 principal planes each carry $\sim$25\% of the rotation
+weight, indicating compound (multi-plane) rotations.  A plane-specific
+intervention at layer~0 would target the dominant 2D subspace,
+modifying only 2 of $k$ dimensions --- a maximally surgical intervention.
+
 \subsection{Comparison of steering methods}
 
 The following table summarises the geometric character of common
@@ -2146,7 +3602,7 @@ Dense addition & $\delta = \alpha\,v$ (constant) &
 Cayley/Rodrigues & $\delta = A\hat{H}$ (rotation) &
   Exactly grade-2 per layer \\
 Sparse activation & $\delta = \lambda\,\Delta z$ &
-  Acts on monosemantic features \\
+  Acts on individual interpretable directions (features identified via sparse autoencoders or similar methods) \\
 Plane-specific & Modify $\metric{l}$ in 2D &
   Targeted grade-0 in one plane \\
 \bottomrule
@@ -2154,16 +3610,19 @@ Plane-specific & Modify $\metric{l}$ in 2D &
 \end{center}
 
 \begin{finding}
-\textbf{Rotation is the mechanism of semantic steering.}
-Across empirical studies, the central finding is that context
-influence in language models is a rotational phenomenon.  The Cayley
-bivector provides a unified representation: its magnitude detects
-vibing, its direction diagnoses the semantic category of context
-influence, and its associated rotation enables active intervention.
-Ablation studies show that random rotations catastrophically fail
-(0\% context-following), while learned rotations succeed (83\%),
-and scaling alone has no effect --- confirming that the antisymmetric
-(bivector) component carries the semantically meaningful signal.
+\textbf{Rotation as a mechanism of semantic steering} (interpretive
+hypothesis, supported by initial experiments).
+The examples in this chapter suggest that context influence in language
+models is a rotational phenomenon.  The Cayley bivector provides a
+unified representation: its magnitude detects vibing, its direction
+diagnoses the semantic category of context influence, and its
+associated rotation enables active intervention.  In prior ablation
+studies on Qwen2.5-7B, random rotations catastrophically fail (0\%
+context-following), while learned rotations succeed (83\%), and
+scaling alone has no effect --- consistent with the antisymmetric
+(bivector) component carrying the semantically meaningful signal.
+Establishing the generality of this finding across models and domains
+remains important future work.
 \end{finding}
 
 \begin{tryit}
@@ -2224,10 +3683,323 @@ You started with vectors and the dot product.  You now have:
 \end{tabular}
 \end{center}
 
+The table above is a chapter-by-chapter inventory.  But the real
+contribution is not a list --- it is a \emph{structure}.  The following
+diagram shows how the pieces fit together into one coherent geometric
+picture.
+
+% ── Figure: The geometry of transformer computation ────────────────
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  >=Stealth,
+  quadrant/.style={draw=#1, fill=#1!6!white, rounded corners=6pt,
+    line width=0.8pt, minimum width=5.2cm, minimum height=4.0cm,
+    inner sep=6pt},
+  qtitle/.style={font=\small\bfseries, #1},
+  qlabel/.style={font=\footnotesize, DGray},
+  qeq/.style={font=\small, #1},
+  arr/.style={->, line width=1.4pt, Navy},
+  arrlbl/.style={font=\scriptsize, Navy, fill=white, inner sep=2pt},
+]
+
+% ── Top-left: Hidden-state grid (Ch 1) ──
+\begin{scope}[shift={(-4.2,3.0)}]
+  \node[quadrant=Navy] (grid) at (0,0) {};
+  \node[qtitle=Navy] at (0,1.5) {Hidden-state grid};
+  \node[qlabel, text width=4.2cm, align=center] at (0,0.7)
+    {Chapters 1, 4};
+
+  % Mini grid
+  \foreach \x in {0,...,3} {
+    \foreach \y in {0,...,2} {
+      \fill[Navy!40] (-1.6+\x*0.7, -0.9+\y*0.5) circle (2pt);
+    }
+  }
+  % Axis labels
+  \draw[->, DGray, line width=0.4pt] (-1.9,-1.1) -- (0.9,-1.1)
+    node[right, font=\tiny, DGray] {$t$};
+  \draw[->, DGray, line width=0.4pt] (-1.9,-1.1) -- (-1.9,0.3)
+    node[above, font=\tiny, DGray] {$l$};
+
+  \node[qeq=Navy] at (0, -1.5) {$H(l,t) \in \mathbb{R}^k$};
+\end{scope}
+
+% ── Top-right: Geometric product (Ch 2–3) ──
+\begin{scope}[shift={(4.2,3.0)}]
+  \node[quadrant=Purple] (prod) at (0,0) {};
+  \node[qtitle=Purple] at (0,1.5) {Geometric product};
+  \node[qlabel, text width=4.2cm, align=center] at (0,0.7)
+    {Chapters 2, 3};
+
+  % Mini vectors + parallelogram
+  \draw[->, Navy, line width=1pt] (-0.8,-0.2) -- (0.8,-0.2)
+    node[right, font=\tiny, Navy] {$a$};
+  \draw[->, Blue, line width=1pt] (-0.8,-0.2) -- (0.0,0.6)
+    node[above, font=\tiny, Blue] {$b$};
+  \fill[Purple!15] (-0.8,-0.2) -- (0.8,-0.2) -- (1.6,0.6) -- (0.0,0.6)
+    -- cycle;
+
+  \node[qeq=Purple] at (0, -1.5)
+    {$ab = \underset{\text{\tiny scalar}}{a \cdot b}
+    + \underset{\text{\tiny plane}}{a \wedge b}$};
+\end{scope}
+
+% ── Bottom-left: Rotor field (Ch 5–6) ──
+\begin{scope}[shift={(-4.2,-3.0)}]
+  \node[quadrant=Teal] (rotor) at (0,0) {};
+  \node[qtitle=Teal] at (0,1.5) {Rotor field};
+  \node[qlabel, text width=4.2cm, align=center] at (0,0.7)
+    {Chapters 5, 6};
+
+  % Mini rotor circles with visible rotation arcs
+  \foreach \i/\col in {0/Teal, 1/Purple, 2/DGreen, 3/Amber} {
+    \draw[\col, line width=0.7pt]
+      (-1.2+\i*0.8, -0.1) circle (0.25);
+    \draw[->, \col, line width=0.8pt]
+      ([shift={(60:0.40)}]-1.2+\i*0.8, -0.1)
+      arc[start angle=60, end angle=300, radius=0.40];
+  }
+
+  \node[qeq=Teal] at (0, -1.5)
+    {$R^{(l)}(t) = \exp(-B^{(l)}(t)/2)$};
+\end{scope}
+
+% ── Bottom-right: Curvature / holonomy (Ch 9–10) ──
+\begin{scope}[shift={(4.2,-3.0)}]
+  \node[quadrant=DRed] (curv) at (0,0) {};
+  \node[qtitle=DRed] at (0,1.5) {Curvature \& holonomy};
+  \node[qlabel, text width=4.2cm, align=center] at (0,0.7)
+    {Chapters 9, 10, 11};
+
+  % Mini loop — shifted down to avoid chapter label
+  \draw[->, Teal, line width=1pt] (-0.6,-0.6) -- (0.4,-0.6);
+  \draw[->, Teal, line width=1pt] (0.4,-0.6) -- (0.4,0.2);
+  \draw[->, Purple, line width=1pt, densely dashed]
+    (-0.6,-0.6) -- (-0.6,0.2);
+  \draw[->, Purple, line width=1pt, densely dashed]
+    (-0.6,0.2) -- (0.4,0.2);
+  % Mismatch indicator — to the right of the loop
+  \draw[DRed, line width=1.4pt, ->] (0.75,-0.35)
+    arc[start angle=-40, end angle=40, radius=0.55]
+    node[right=2pt, font=\scriptsize, DRed] {$\Delta\theta$};
+
+  \node[qeq=DRed] at (0, -1.5)
+    {$\Omega(l,t) = \log R_{\text{loop}}(l,t)$};
+\end{scope}
+
+% ── Central connecting arrows ──
+% Grid → Product (top)
+\draw[arr] (grid.east) -- (prod.west)
+  node[arrlbl, midway, above] {pairwise relationships};
+
+% Grid → Rotor (left)
+\draw[arr] (grid.south) -- (rotor.north)
+  node[arrlbl, midway, left] {layer transitions};
+
+% Product → Rotor (diagonal) — label in the gap, anchored left
+\draw[arr] (prod.south west) -- (rotor.north east);
+\node[font=\scriptsize, Navy, fill=white, inner sep=2pt,
+  rotate=-27, anchor=west] at (2.2, 0.55) {bivectors $\to$ rotors};
+
+% Rotor → Curvature (bottom) — label below the line to avoid center box
+\draw[arr] (rotor.east) -- (curv.west)
+  node[arrlbl, midway, below=2pt] {compose around loops};
+
+% Product → Curvature (right)
+\draw[arr] (prod.south) -- (curv.north)
+  node[arrlbl, midway, right] {commutators};
+
+% ── Central summary ──
+\node[draw=Navy, fill=LBlue, rounded corners=4pt,
+  inner sep=5pt, font=\small, text width=3.8cm, align=center]
+  at (0,0) {%
+  $H : (l,t) \to \mathbb{R}^k$\\[2pt]
+  $R : (l,t) \to \mathrm{Spin}(k)$\\[2pt]
+  $\Omega : (l,t) \to \mathfrak{so}(k)$\\[4pt]
+  {\footnotesize\textbf{vectors\,,\;rotations\,,\;curvature}}};
+
+\end{tikzpicture}
+
+\caption{The geometric structure of transformer computation.
+Hidden states form a vector field $H(l,t)$ over a grid of layers and
+token positions.  Relationships between vectors are captured by the
+geometric product, which decomposes into scalar (alignment) and
+bivector (plane) components.  Each layer induces a
+position-dependent transformation expressed as a rotor field
+$R^{(l)}(t)$.  When these transformations do not commute across
+directions, parallel transport around loops produces holonomy,
+captured by the curvature bivector $\Omega(l,t)$.  Together, these
+elements describe the transformer as a geometric system evolving
+across both depth and context.}
+\label{fig:master-geometry}
+\end{figure}
+
+\begin{keyidea}
+This framework unifies the analysis of transformers into a single
+geometric picture.  Instead of viewing the model as a sequence of
+matrix operations, we interpret it as a field of vectors evolving
+under local rotations, with global structure revealed through curvature.
+The grid provides the domain, bivectors reveal directional structure,
+rotors describe transformations, and holonomy measures interaction
+between directions.  This perspective exposes structure that is invisible
+to scalar summaries and traditional linear analysis.
+
+\medskip
+\centering
+\emph{Learning = discovering geometric structure in the hidden-state field.}
+\end{keyidea}
+
+
+% ──────────────────────────────────────────────────────────────────
+\section{The transformer as a discrete geometric field theory}
+\label{sec:field-theory}
+% ──────────────────────────────────────────────────────────────────
+
+The observations throughout this book --- hidden-state grids, bivector
+decompositions, rotor fields, holonomy --- are not independent facts.
+They are elements of a single structure.  This section formalises
+that structure.
+
+\subsection{The base space: a discrete lattice}
+
+Define the grid
+\[
+  \mathcal{G} = \{(l,t) \mid l = 0,\dots,L-1,\; t = 0,\dots,T-1\}.
+\]
+The vertical axis indexes layers (depth, computation time); the
+horizontal axis indexes token positions (sequence context).
+$\mathcal{G}$ is the \textbf{base space} of the system.
+
+\subsection{The fiber: hidden-state space}
+
+At each grid point, the model maintains a vector
+$H(l,t) \in \mathbb{R}^k$ (after whitening, so the metric is
+Euclidean).  Thus the transformer defines a \textbf{vector field}:
+\[
+  H : \mathcal{G} \longrightarrow \mathbb{R}^k.
+\]
+In the language of differential geometry, this is a section of a
+trivial fiber bundle with base $\mathcal{G}$ and fiber
+$\mathbb{R}^k$.
+
+\subsection{Local transformations as a connection}
+
+Moving across the grid changes the hidden state.  Each direction
+has its own transport operator.
+
+\paragraph{Vertical direction (layers).}
+A layer induces a transformation
+$U^{(l)}(t) : H(l,t) \to H(l+1,t)$,
+locally approximated as
+\[
+  U^{(l)}(t) \;\approx\; \exp\!\big(B^{(l)}(t)\big),
+  \qquad B^{(l)}(t) \in \mathfrak{so}(k).
+\]
+The generator $B^{(l)}(t)$ is a skew-symmetric operator --- a
+bivector encoding the rotation plane and magnitude.
+
+\paragraph{Horizontal direction (tokens).}
+Attention induces transformations across token positions:
+$T^{(l)}(t) : H(l,t) \to H(l,t+1)$,
+locally approximated as
+\[
+  T^{(l)}(t) \;\approx\; \exp\!\big(C^{(l)}(t)\big),
+  \qquad C^{(l)}(t) \in \mathfrak{so}(k).
+\]
+
+Together, $U^{(l)}$ and $T^{(l)}$ define a \textbf{connection} on the
+grid: they prescribe how vectors are transported along vertical and
+horizontal directions.
+
+\subsection{Rotor field representation}
+
+Using GA, the local transformations become rotors:
+\[
+  R^{(l)}(t) = \exp\!\left(-\tfrac{1}{2}\, B^{(l)}(t)\right),
+  \qquad
+  H(l+1,t) \;\approx\; R^{(l)}(t)\; H(l,t)\; \widetilde{R}^{(l)}(t),
+\]
+where $\widetilde{R}$ is the reverse (inverse for rotors).  The
+map $R^{(l)} : t \mapsto \mathrm{Spin}(k)$ is a field from token
+positions to the spin group: a transformer layer defines a
+\emph{field of rotations}, not a single transformation.
+
+\subsection{Curvature from non-commutativity}
+
+Consider a loop on the grid:
+$(l,t) \to (l,t\!+\!1) \to (l\!+\!1,t\!+\!1) \to (l\!+\!1,t) \to (l,t)$.
+The loop operator is
+\[
+  R_{\text{loop}}(l,t) \;=\;
+  R_{\uparrow}^{(t+1)}\;\;
+  R_{\rightarrow}^{(l+1)}\;\;
+  \big(R_{\uparrow}^{(t)}\big)^{-1}\;\;
+  \big(R_{\rightarrow}^{(l)}\big)^{-1}.
+\]
+If the vertical and horizontal transformations commute,
+$R_{\text{loop}} = I$ and the grid is flat.  Otherwise the
+\textbf{curvature bivector}
+\[
+  \Omega(l,t) = \log R_{\text{loop}}(l,t) \;\in\; \mathfrak{so}(k)
+\]
+is non-zero.  For small transformations, the holonomy is governed by
+the commutator:
+\[
+  R_{\text{loop}} \;\approx\; \exp\!\big([B^{(l)}, C^{(l)}]\big),
+  \qquad
+  \Omega(l,t) \;\approx\; [B^{(l)}(t),\; C^{(l)}(t)].
+\]
+
+\begin{gabox}
+\textbf{Curvature arises from non-commutativity of transformations.}
+When layer and token operations commute, curvature is zero and the
+computation is separable.  When they do not commute, curvature
+appears --- and its bivector reveals \emph{which plane} of
+representation space is curved.
+\end{gabox}
+
+\subsection{Interpretation for transformer computation}
+
+This framework yields five concrete re-interpretations:
+
+\begin{enumerate}[nosep]
+\item \textbf{Tokens are positions} in a structured space, not
+  independent objects.
+\item \textbf{Hidden states are fields} --- contextualised vectors
+  evolving across the grid.
+\item \textbf{Layers are local transformations} --- position-dependent,
+  not uniform.
+\item \textbf{Attention induces horizontal transport} --- moving
+  information across token positions.
+\item \textbf{Reasoning corresponds to curvature} --- it appears when
+  updates cannot be decomposed into independent layer and token steps.
+\end{enumerate}
+
+\subsection{Summary of the formal structure}
+
+The full framework is captured in three fields:
+\[
+\begin{aligned}
+  H &: \mathcal{G} \;\longrightarrow\; \mathbb{R}^k
+    &&\text{(hidden-state field)} \\[3pt]
+  R &: \mathcal{G} \;\longrightarrow\; \mathrm{Spin}(k)
+    &&\text{(rotor field)} \\[3pt]
+  \Omega &: \mathcal{G} \;\longrightarrow\; \mathfrak{so}(k)
+    &&\text{(curvature field)}
+\end{aligned}
+\]
+
+\begin{keyidea}
+A transformer is a discrete geometric field system whose computation
+is governed by rotations and curvature.  The grid provides the domain,
+bivectors reveal directional structure, rotors describe
+transformations, and holonomy measures interaction between directions.
+\end{keyidea}
+
 \section{What was invisible before}
 
-Scalar summaries ($\|U - I\|_F$, $\|[A_i, A_j]\|_F$, $\|\Omega - I\|_F$)
-tell you \emph{how much}.  GA tells you \emph{how much} and
+Scalar summaries --- the size of a rotation ($\|U - I\|_F$), the size of a commutator ($\|[A_i, A_j]\|_F$), or the curvature magnitude ($\|\Omega - I\|_F$) --- tell you \emph{how much}.  GA tells you \emph{how much} and
 \emph{in which direction}.  Specifically:
 
 \begin{enumerate}[nosep]
@@ -2247,8 +4019,7 @@ the full bivector.
   trivectors (grade 3) carry meaningful information about three-layer
   interactions?
 
-\item \textbf{Conformal GA.}  The conformal model $\mathrm{Cl}(k+1,1)$
-  adds translations to the algebra.  Could this unify residual
+\item \textbf{Conformal GA.}  Conformal GA extends the algebra by adding two extra dimensions (written $\mathrm{Cl}(k+1,1)$), which allows translations --- not just rotations --- to be represented algebraically.  Could this unify residual
   connections (translations) with rotations (rotors)?
 
 \item \textbf{GA in training dynamics.}  How does the bivector field
@@ -2258,8 +4029,7 @@ the full bivector.
 \item \textbf{Multimodal models.}  When vision and language tokens
   interact, do they occupy different rotation planes?
 
-\item \textbf{Projective GA.}  $\mathrm{Cl}(k,0,1)$ naturally handles
-  the affine structure of residual connections.
+\item \textbf{Projective GA.}  Projective GA (written $\mathrm{Cl}(k,0,1)$) adds one extra dimension whose square is zero, providing a natural way to represent the affine shifts that residual connections add.
 \end{enumerate}
 
 \section{Further reading}
@@ -2291,42 +4061,279 @@ the full bivector.
 \label{app:transformers}
 % ══════════════════════════════════════════════════════════════════════════════
 
-This appendix provides the minimum transformer background needed for the
-book.
+This appendix provides the transformer background needed for the book.
+No prior ML knowledge is assumed; we build from first principles.
 
-\section{The architecture}
+Every model we study in this book --- Qwen2.5-7B, Qwen2.5-32B,
+DeepSeek-R1-Distill-Qwen-7B --- is a \textbf{GPT-style}
+(decoder-only, autoregressive) transformer.  This is the architecture
+behind GPT-4, Claude, LLaMA, and most modern large language models.
+We describe this specific architecture below; encoder-only models
+(like BERT) and encoder-decoder models (like the original Transformer
+of Vaswani et~al., 2017) share many ideas but differ in structure.
 
-A transformer consists of $L$ identical layers.  Each layer has:
-\begin{enumerate}[nosep]
-\item \textbf{Multi-head self-attention}: each token computes a weighted
-  average of all tokens' representations.
-\item \textbf{Feed-forward network}: a two-layer MLP applied to each
-  token independently.
-\item \textbf{Residual connections}: the output is added to the input:
-  $H^{(l+1)} = H^{(l)} + \Delta H^{(l)}$.
-\item \textbf{Layer normalization}: stabilizes the scale of
-  representations.
-\end{enumerate}
+\section{What is a language model?}
 
-The hidden state $H(l, t) \in \mathbb{R}^p$ at layer $l$ and token
-position $t$ is the model's internal representation.
+A language model is a function that, given a sequence of words (tokens),
+predicts the next word.  ``The capital of France is'' $\to$ ``Paris.''
+Internally, the model converts each token into a vector, transforms
+those vectors through many layers of computation, and reads out the
+prediction from the final layer.  The key objects for us are the
+\textbf{hidden states} --- the intermediate vectors at each layer.
+
+\section{Tokens and embeddings}
+
+Before processing, text is split into \textbf{tokens} (roughly
+word-pieces).  Each token is assigned a vector $H^{(0,t)} \in
+\mathbb{R}^p$ from a learned \textbf{embedding table}.  The integer
+$t$ indexes the token position; $p$ is the \textbf{hidden dimension}
+(e.g., $p = 3584$ for Qwen2.5-7B).  These initial vectors are the
+starting point for all subsequent computation.
+
+\section{The embedding layer (layer 0)}
+
+The embedding table is a matrix $W_E \in \mathbb{R}^{p \times V}$
+where $V$ is the vocabulary size.  Each token $x_t$ (an integer index
+into the vocabulary) is mapped to a column of this matrix:
+\[
+  H^{(0,t)} = W_E[\,x_t\,] + \mathrm{pos}(t)
+\]
+where $\mathrm{pos}(t)$ is a \textbf{positional encoding} that tells
+the model where in the sequence this token appears.  (Modern models
+like Qwen use \emph{Rotary Position Embeddings} (RoPE), which inject
+position information inside the attention mechanism rather than by
+adding a vector here; the effect is similar.)
+
+The key point for this book: \textbf{the embedding vectors
+$H^{(0,t)}$ are not random.}  Tokens with related meanings have
+similar embeddings (``cat'' and ``kitten'' are close, ``cat'' and
+``democracy'' are far apart).  However, the embedding space is
+organised very differently from the model's internal processing
+space.  The transition from layer~0 to layer~1 is therefore
+exceptionally large --- in Chapter~6, we observe a rotation of
+$4.28$ radians ($245^\circ$) at this boundary, far larger than any
+subsequent layer transition.  The first few layers are essentially
+\emph{re-encoding} the token-identity information into a coordinate
+system suited for deeper processing.
+
+\section{The decoder-only architecture}
+
+A GPT-style transformer consists of $L$ identical \textbf{decoder
+layers} stacked sequentially (there is no separate encoder).
+Each layer transforms the hidden state $H^{(l,t)} \to H^{(l+1,t)}$
+through two sub-components applied in sequence: \emph{causal}
+self-attention and a feed-forward network.
+
+\subsection*{Self-attention}
+
+Self-attention is the mechanism by which tokens communicate.  At each
+layer, every token ``looks at'' all other tokens and computes a
+weighted combination of their representations.  Here is the math.
+
+Each hidden state $H^{(l,t)} \in \mathbb{R}^p$ is projected through
+three learned matrices to produce a \textbf{query}, \textbf{key}, and
+\textbf{value}:
+\[
+  q_t = W_Q \, H^{(l,t)}, \qquad
+  k_t = W_K \, H^{(l,t)}, \qquad
+  v_t = W_V \, H^{(l,t)}
+\]
+where $W_Q, W_K \in \mathbb{R}^{d_k \times p}$ and
+$W_V \in \mathbb{R}^{d_v \times p}$ are learned weight matrices, and
+$d_k, d_v$ are the query/key and value dimensions
+(typically $d_k = d_v = p / n_{\text{heads}}$).
+
+Think of it this way: the query $q_t$ asks ``what am I looking for?'',
+the key $k_s$ says ``here is what I contain,'' and the value $v_s$ says
+``here is the information I provide if selected.''
+
+The \textbf{attention weight} from token $t$ to token $s$ measures how
+well the query matches the key:
+\[
+  \alpha_{t,s} = \frac{\exp(q_t^\top k_s \,/\, \sqrt{d_k})}
+                      {\sum_{r \le t} \exp(q_t^\top k_r \,/\, \sqrt{d_k})}
+\]
+The division by $\sqrt{d_k}$ prevents the dot products from growing too
+large in high dimensions.  The $\exp$ and normalisation (a
+\textbf{softmax}) turn the raw scores into probabilities that sum to~1.
+The constraint $r \le t$ is the \textbf{causal mask}: token $t$ can
+only attend to tokens at or before its own position (not to future
+tokens).
+
+The attention output for token $t$ is the weighted sum of values:
+\[
+  \mathrm{Attn}(t) = \sum_{s \le t} \alpha_{t,s} \, v_s
+\]
+
+In practice, transformers use \textbf{multi-head attention}: the
+projection is split into $n_{\text{heads}}$ independent ``heads,'' each
+with its own $W_Q, W_K, W_V$ matrices of smaller dimension.  Each head
+can attend to different aspects of the input (one head might track
+syntactic relationships while another tracks semantic similarity).
+The outputs of all heads are concatenated and projected back to
+$\mathbb{R}^p$:
+\[
+  \mathrm{MultiHead}(t) = W_O \,
+    \begin{bmatrix} \mathrm{head}_1(t) \\ \vdots \\ \mathrm{head}_{n_h}(t) \end{bmatrix}
+\]
+where $W_O \in \mathbb{R}^{p \times p}$ is a learned output projection.
+
+The result: each token's representation is updated based on all tokens
+that precede it.  The same word is represented differently depending on
+its context --- ``bank'' in ``river bank'' vs.\ ``bank account'' will
+have different hidden states after attention.
+
+\subsection*{Feed-forward network (MLP)}
+
+After attention, each token is processed \emph{independently} by a
+two-layer neural network:
+\[
+  \mathrm{FFN}(x) = W_2 \;\sigma(W_1 \, x + b_1) + b_2
+\]
+where $W_1 \in \mathbb{R}^{d_{\mathrm{ff}} \times p}$ and
+$W_2 \in \mathbb{R}^{p \times d_{\mathrm{ff}}}$ are learned weight
+matrices, $b_1, b_2$ are biases, and $\sigma$ is a nonlinear
+activation function (modern transformers typically use
+SiLU or GELU).  The intermediate dimension
+$d_{\mathrm{ff}}$ is usually $4p$ or larger ($d_{\mathrm{ff}} = 18944$
+for Qwen2.5-7B).
+
+The MLP is the model's ``thinking'' step for each token --- it combines
+and transforms features without inter-token communication.
+
+\subsection*{Residual connections and layer normalisation}
+
+Both sub-components use \textbf{residual connections}: the output is
+added to the input rather than replacing it:
+\[
+  H^{(l+1,t)} = H^{(l,t)} + \mathrm{Attn}^{(l)}(t) + \mathrm{FFN}^{(l)}(t)
+\]
+This means the hidden state \emph{accumulates} changes layer by layer
+rather than being overwritten.  The residual structure is what makes the
+hidden-state grid continuous enough for GA to work: adjacent layers
+differ by a small additive update.
+
+\textbf{Layer normalisation} (applied before each sub-component)
+rescales the hidden state to have zero mean and unit variance across
+its dimensions, stabilising training.
+
+The hidden state $H^{(l, t)} \in \mathbb{R}^p$ at layer $l$ and token
+position $t$ is the model's internal representation --- the central
+object of this book.
+
+\section{The hidden-state grid}
+
+The full set of hidden states forms a two-dimensional grid:
+\begin{itemize}[nosep]
+\item \textbf{Layer axis}: $l = 0, 1, \ldots, L-1$, from input
+  embedding to final representation.
+\item \textbf{Token axis}: $t = 0, 1, \ldots, T-1$, from the first
+  token to the last.
+\end{itemize}
+Each grid point holds a $p$-dimensional vector.  This $(L \times T)$
+grid is the ``laboratory'' we study with GA.  Moving along the layer
+axis corresponds to the model's processing depth; moving along the
+token axis corresponds to the model's processing breadth.
 
 \section{Autoregressive prediction}
 
-GPT-style models predict the next token given all preceding tokens:
-$P(x_t \mid x_{<t})$.  The final hidden state $H(L, t)$ is projected to
-vocabulary logits, and the highest-probability token is selected.
+The defining feature of a decoder-only model is \textbf{autoregressive
+generation}: it predicts one token at a time, always conditioning on
+everything that came before:
+\[
+  P(x_t \mid x_1, x_2, \ldots, x_{t-1})
+\]
+This is why the causal mask exists in self-attention --- token $t$ must
+not see tokens $t+1, t+2, \ldots$ because they have not been generated
+yet.
+
+\subsection*{The unembedding layer (decoding)}
+
+After the final transformer layer, the hidden state must be converted
+back into a prediction over words.  This is done by the
+\textbf{unembedding layer} (also called the \textbf{language model
+head}), a learned linear map
+$W_{\mathrm{head}} \in \mathbb{R}^{V \times p}$:
+\[
+  \mathrm{logits} = W_{\mathrm{head}} \, H^{(L-1, t)}
+\]
+where $V$ is the vocabulary size (e.g., $V = 151{,}936$ for
+Qwen2.5-7B).  Each entry of the resulting $V$-dimensional vector is
+the \textbf{logit} (unnormalised score) for one vocabulary token.
+Applying a softmax converts logits to probabilities:
+\[
+  P(x_{t+1} = w \mid x_{\le t})
+    = \frac{\exp(\mathrm{logit}_w)}
+           {\sum_{w'=1}^{V} \exp(\mathrm{logit}_{w'})}
+\]
+The highest-probability token is selected as the prediction.
+
+Geometrically, the logit for word $w$ is the dot product of
+$H^{(L-1,t)}$ with the $w$-th row of $W_{\mathrm{head}}$.  This means
+the final hidden state must \emph{point in the right direction} for the
+correct prediction to win.  This directional requirement is the
+ultimate driver of the rotation activity we observe throughout the
+network:
+
+\begin{itemize}[nosep]
+\item \textbf{Early layers} perform large rotations (Chapter~6: up to
+  $245^\circ$) to re-encode the raw embedding into an orientation from
+  which deeper layers can work.
+\item \textbf{Middle layers} perform context-dependent rotations --- the
+  planes shift depending on what the model has read (Chapter~7).  This
+  is where meaning is built: the hidden state is steered toward the
+  correct region of representation space.
+\item \textbf{Late layers} shift from rotation to stretching
+  (Chapter~8): condition numbers exceed $10^3$ and effective ranks drop
+  below~10.  The metric factor $P^{(l)}$ aggressively amplifies the
+  target direction and suppresses competitors, funnelling the hidden
+  state toward the correct vocabulary vector.
+\end{itemize}
+
+In the language of this book: rotation \emph{steers} (grade-2),
+stretching \emph{selects} (grade-0).  Both are driven by the
+dot-product geometry of the unembedding layer.
+
+\subsection*{Autoregressive generation}
+
+The \textbf{score} $s(x, u)$ of a token $u$ at the end of text $x$ is
+the logit assigned to $u$ --- this is what the dependency gradient
+(Chapter~\ref{chap:dependency}) differentiates through.
+
+To generate a full sentence, the process repeats: the predicted token
+is appended to the input, and the model runs again to predict the next
+token, one step at a time.  At each step, the causal mask ensures the
+model sees only the tokens generated so far.
+
+\section{What gradients measure}
+
+A \textbf{gradient} is the derivative of a scalar output with respect
+to an input.  If the model's score for token ``Paris'' is
+$s$, then $\partial s / \partial H^{(l,t)}$ is a vector pointing in
+the direction of hidden-state change that most increases the score for
+``Paris'' at layer~$l$, token~$t$.  Its magnitude tells you how
+\emph{sensitive} the output is to changes at that point.
+
+In this book, we use gradients to compute \textbf{dependency density}
+(Chapter~\ref{chap:dependency}): $D_{l,t} = \|\partial s / \partial
+H^{(l,t)}\|$.  This tells us which layers and tokens matter most for
+the model's prediction --- without altering the model or its output.
 
 \section{The models we study}
 
 \begin{itemize}[nosep]
-\item \textbf{Qwen-2.5-7B}: 28 layers, hidden dimension 3584, 7 billion
-  parameters.
-\item \textbf{Qwen-2.5-32B}: 64 layers, hidden dimension 5120, 32
-  billion parameters.
+\item \textbf{Qwen2.5-7B}: 28 layers, hidden dimension 3584, 7 billion
+  parameters.  Our primary laboratory throughout the book.
+\item \textbf{Qwen2.5-32B}: 64 layers, hidden dimension 5120, 32
+  billion parameters.  Used for scaling comparisons.
 \item \textbf{DeepSeek-R1-Distill-Qwen-7B}: same architecture as
-  Qwen-7B, distilled from a larger reasoning model.
+  Qwen-7B, distilled from a larger reasoning model.  Used to study
+  how training objective affects geometric structure.
 \end{itemize}
+
+All models are freely available on Hugging Face and can be loaded with
+a single line of code (see the Preface).  A GPU with 16\,GB of memory
+is sufficient for the 7B models.
 
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -2334,55 +4341,331 @@ vocabulary logits, and the highest-probability token is selected.
 \label{app:ga-formal}
 % ══════════════════════════════════════════════════════════════════════════════
 
-This appendix provides the formal mathematical construction of the
-Clifford algebra for readers who want the full picture.
+This appendix builds up Geometric Algebra from first principles.
+If you have taken a linear algebra course and are comfortable with
+vectors, dot products, and matrices, you have everything you need.
+We introduce one idea at a time, with small examples you can verify
+by hand.
+
+\section{The problem GA solves}
+
+Linear algebra gives you two operations on vectors: the \textbf{dot
+product} $a \ip b$ (a scalar) and the \textbf{cross product}
+$a \times b$ (a vector, but only in 3D).  The dot product tells you
+about alignment; the cross product tells you about the plane the two
+vectors span.
+
+But the cross product is a 3D accident.  In $\mathbb{R}^{256}$ (the
+kind of space we encounter inside transformers), there is no cross
+product.  Yet we still want to talk about the plane that two vectors
+define, the rotation that maps one vector to another, and how
+rotations compose.
+
+Geometric Algebra solves this by introducing a single product --- the
+\textbf{geometric product} --- that captures both alignment and plane
+information in any dimension.  Everything else follows.
+
+\section{The geometric product: one rule}
+
+Start with a vector space $V = \mathbb{R}^k$ equipped with the
+standard inner product.  The \textbf{geometric product} is an
+associative product on vectors defined by one rule:
+
+\begin{gabox}
+\textbf{The fundamental identity.}  For any vector $v$:
+\[
+  v \, v = v \ip v = \|v\|^2
+\]
+The geometric product of a vector with itself is its squared length.
+\end{gabox}
+
+That's it.  This single rule, combined with associativity and
+distributivity, generates the entire algebra.
+
+Let's see what this implies.  Pick an orthonormal basis
+$e_1, e_2, \ldots, e_k$ (so $e_i \ip e_j = \delta_{ij}$ (that is, $\delta_{ij} = 1$ when $i = j$ and $0$ otherwise)).
+From the fundamental identity:
+\[
+  e_i \, e_i = e_i \ip e_i = 1
+\]
+
+Now consider the product $e_1 \, e_2$.  We can derive its properties.
+Compute $(e_1 + e_2)^2$ in two ways:
+
+\textbf{By the fundamental identity:}
+$(e_1 + e_2)^2 = \|e_1 + e_2\|^2 = 2$
+
+\textbf{By expanding:}
+$(e_1 + e_2)^2 = e_1 e_1 + e_1 e_2 + e_2 e_1 + e_2 e_2
+= 1 + e_1 e_2 + e_2 e_1 + 1 = 2 + e_1 e_2 + e_2 e_1$
+
+Comparing: $e_1 e_2 + e_2 e_1 = 0$, so
+
+\begin{gabox}
+\textbf{Anti-commutativity of orthogonal vectors.}
+\[
+  e_i \, e_j = -e_j \, e_i \qquad (i \neq j)
+\]
+Orthogonal vectors anti-commute under the geometric product.
+\end{gabox}
+
+For general vectors $a$ and $b$, the geometric product decomposes as:
+\[
+  a \, b = \underbrace{a \ip b}_{\text{scalar (grade-0)}}
+         + \underbrace{a \op b}_{\text{bivector (grade-2)}}
+\]
+The \textbf{inner product} $a \ip b$ is the familiar dot product.
+The \textbf{outer product} $a \op b$ is something new: a
+\emph{bivector}, which represents the oriented plane spanned by $a$
+and $b$.
+
+\paragraph{A small example.}
+In $\mathbb{R}^3$, let $a = 3e_1 + e_2$ and $b = e_1 + 2e_2$.  Then:
+\begin{align*}
+  a \ip b &= 3 \cdot 1 + 1 \cdot 2 = 5 \\
+  a \op b &= (3 \cdot 2 - 1 \cdot 1)\, e_1 \op e_2
+           = 5 \, e_1 \op e_2
+\end{align*}
+So $a\,b = 5 + 5\,e_1 \op e_2$.
+The scalar part says the vectors are partially aligned.  The bivector
+part says they span an area of 5 in the $e_1 e_2$ plane.
 
 \section{The Clifford algebra $\mathrm{Cl}(k, 0)$}
 
-Given a $k$-dimensional real vector space $V$ with positive-definite
-inner product, the Clifford algebra is the associative algebra generated
-by $V$ under:
-\[
-  v^2 = v \ip v = \|v\|^2 \quad \text{for all } v \in V.
-\]
+The algebra generated by all products of basis vectors $e_1, \ldots, e_k$
+under the geometric product is the \textbf{Clifford algebra}
+$\mathrm{Cl}(k, 0)$.  The ``$(k, 0)$'' means $k$ dimensions where every basis vector squares to $+1$ (as opposed to signatures used in relativity, which we never need). Here, `metric' just means the rule for computing squared lengths --- the standard dot product.
 
-For orthonormal basis vectors $e_i$:
-\[
-  e_i^2 = 1, \qquad e_i e_j = -e_j e_i \quad (i \neq j).
-\]
+The distinct basis elements are:
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+\textbf{Grade} & \textbf{Basis elements} & \textbf{Count} & \textbf{Name} \\
+\midrule
+0 & $1$ & $\binom{k}{0} = 1$ & Scalars \\
+1 & $e_1, e_2, \ldots, e_k$ & $\binom{k}{1} = k$ & Vectors \\
+2 & $e_1 e_2, \; e_1 e_3, \; \ldots$ & $\binom{k}{2} = \frac{k(k-1)}{2}$ & Bivectors \\
+3 & $e_1 e_2 e_3, \; \ldots$ & $\binom{k}{3}$ & Trivectors \\
+$\vdots$ & $\vdots$ & $\vdots$ & $\vdots$ \\
+$k$ & $e_1 e_2 \cdots e_k$ & $1$ & Pseudoscalar \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-The algebra has dimension $2^k$, graded by degree:
-$\mathrm{Cl}(k,0) = \bigoplus_{r=0}^{k} \bigwedge^r V$.
+The total dimension is $\sum_{r=0}^k \binom{k}{r} = 2^k$.  A general
+element of $\mathrm{Cl}(k, 0)$ is a \textbf{multivector}: a sum of
+components across different grades.
+
+For $k = 3$: $\mathrm{Cl}(3,0)$ has dimension $2^3 = 8$, with
+1~scalar, 3~vectors, 3~bivectors, and 1~pseudoscalar.
+
+For $k = 256$ (the whitened dimension used in this book): $\mathrm{Cl}(256, 0)$
+has dimension $2^{256}$, an astronomically large space.  But we only
+ever use grades 0, 1, and 2 --- scalars, vectors, and bivectors --- which
+is a subspace of dimension $1 + 256 + 32{,}640 = 32{,}897$.
 
 \section{Blades and multivectors}
 
-A \textbf{$r$-blade} $B_r = v_1 \op \cdots \op v_r$ represents an
-oriented $r$-dimensional subspace.  A general grade-$r$ element is a
-linear combination of $r$-blades.  A \textbf{multivector} is a sum of
-elements of different grades.
+A \textbf{blade} is a grade-$r$ element that can be written as a single
+outer product:
+\[
+  B_r = v_1 \op v_2 \op \cdots \op v_r
+\]
+
+A blade represents an oriented $r$-dimensional subspace.  For grade-2
+(bivectors), a blade is a single oriented plane.  A general bivector
+may be a sum of blades --- this happens when a rotation involves
+multiple planes simultaneously.
+
+\paragraph{Example: simple vs compound bivectors.}
+\begin{itemize}[nosep]
+\item $B = 3 \, e_1 \op e_2$ is a \textbf{simple} bivector (a blade):
+  it represents one plane.
+\item $B = 2 \, e_1 \op e_2 + 5 \, e_3 \op e_4$ is a \textbf{compound}
+  bivector: it involves two independent planes.  This cannot be written
+  as a single $v_1 \op v_2$.
+\end{itemize}
+
+In 3D, every bivector is simple (there is only one independent plane).
+In 4D and above, compound bivectors exist and are common.  In the
+256-dimensional space of transformer hidden states, layer transition
+bivectors are highly compound --- they involve dozens of active planes.
+This is where the ``principal plane decomposition'' from Chapter~3
+becomes essential.
+
+\section{Rotors: the GA way to rotate}
+
+A \textbf{rotor} is the GA object that represents a rotation. It is built from scalars and bivectors only (no plain vectors --- this is called `even-grade'). It must satisfy $R\widetilde{R} = 1$, where $\widetilde{R}$ reverses the order of all vector factors (defined precisely in the Reversion section below). Think of a rotor as the GA analog of a unit-length complex number $e^{i\theta}$.
+
+The simplest rotor rotates by angle $\theta$ in the plane of unit
+bivector $\hat{B}$:
+\[
+  R = \exp\!\left(-\frac{\hat{B}\theta}{2}\right)
+    = \cos\!\left(\frac{\theta}{2}\right)
+    - \hat{B}\,\sin\!\left(\frac{\theta}{2}\right)
+\]
+
+Why the half angle?  Because a rotor acts on a vector $v$ via the
+\textbf{sandwich product}:
+\[
+  v' = R \, v \, \rev{R}
+\]
+The two factors of $R$ each contribute $\theta/2$, giving a total
+rotation of $\theta$.
+
+\paragraph{Example in $\mathbb{R}^3$.}
+To rotate $e_1$ by $90^\circ$ in the $e_1 e_2$ plane:
+\begin{align*}
+  R &= \cos(45^\circ) - e_1 e_2 \sin(45^\circ)
+     = \frac{\sqrt{2}}{2}(1 - e_1 e_2) \\
+  R \, e_1 \, \rev{R}
+    &= \frac{1}{2}(1 - e_1 e_2)\, e_1 \,(1 + e_1 e_2) \\
+    &= \frac{1}{2}(e_1 - e_1 e_2 e_1)(1 + e_1 e_2) \\
+    &= \frac{1}{2}(e_1 + e_2)(1 + e_1 e_2) \\
+    &= e_2 \quad \checkmark
+\end{align*}
+(We used $e_1 e_2 e_1 = -e_2 e_1 e_1 = -e_2$ and similar rules.)
+
+\paragraph{Multi-plane rotors.}
+In high dimensions, a rotor can involve multiple independent rotation
+planes simultaneously.  A general rotor in $\mathbb{R}^k$ is:
+\[
+  R = \exp\!\left(-\frac{1}{2}\sum_j \theta_j \hat{B}_j\right)
+\]
+where each $\hat{B}_j$ is a unit bivector in a distinct plane.
+If the planes are orthogonal (commuting bivectors), this factorises
+into a product of simple rotors:
+$R = R_1 R_2 \cdots R_m$.
 
 \section{The spin group}
 
-The set of rotors $R$ with $R\rev{R} = 1$ forms the \textbf{spin group}
-$\mathrm{Spin}(k)$, which double-covers $\mathrm{SO}(k)$.  Every
-rotation can be written as:
+The set of all rotors forms a group under the geometric product,
+called the \textbf{spin group} $\mathrm{Spin}(k)$.
+
+Key properties:
+\begin{itemize}[nosep]
+\item \textbf{Closure}: the product of two rotors is a rotor.
+\item \textbf{Identity}: $R = 1$ (the scalar 1 is a rotor with zero rotation).
+\item \textbf{Inverse}: $R^{-1} = \rev{R}$ (just reverse the rotor).
+\item \textbf{$\mathrm{SO}(k)$}: In matrix language, $\mathrm{SO}(k)$ is the group of $k \times k$
+  orthogonal matrices with determinant $+1$ --- in other words, the group of all rotations in $k$ dimensions.
+\item \textbf{Double cover}: both $R$ and $-R$ produce the same rotation (since $(-R)v(-\widetilde{R}) = Rv\widetilde{R}$). This means there are always two rotors for every rotation matrix --- a bookkeeping detail that never affects computations. So $\mathrm{Spin}(k)$ is a
+  double cover of $\mathrm{SO}(k)$.
+\end{itemize}
+
+The spin group provides a
+more compact and algebraically natural parameterisation: instead of
+$k^2$ matrix entries subject to $k(k+1)/2$ orthogonality constraints,
+a rotor is determined by a bivector (the logarithm), which has exactly
+$k(k-1)/2$ free parameters --- the right number for a rotation in $k$
+dimensions.
+
+\section{Bivectors as rotation generators}
+\textit{(the Lie algebra $\mathfrak{so}(k)$)}
+
+Bivectors do double duty: they represent oriented planes \emph{and}
+they are the building blocks of rotations: a bivector $B$ describes the direction and rate of a rotation, and exponentiating gives the full rotation $R = e^{-B/2}$. The bivector is to the rotation what velocity is to position.
+
+Given two bivectors (two rotation directions), we can ask: does the order matter? The \textbf{commutator} answers this question. The set of all
+bivectors, equipped with the \textbf{commutator bracket}
 \[
-  R = \exp\!\left(-\frac{B\theta}{2}\right)
+  [B_1, B_2] = B_1 B_2 - B_2 B_1
 \]
-for a unit bivector $B$ and angle $\theta$.
+forms an algebraic structure called a \textbf{Lie algebra} --- a vector space with a bracket operation that measures non-commutativity. This particular Lie algebra is the one that governs rotations in $k$ dimensions, known as $\mathfrak{so}(k)$.
 
-\section{The Lie algebra}
+The connection is explicit: a bivector
+$B = \sum_{i < j} B_{ij} \, e_i \op e_j$
+corresponds to the skew-symmetric matrix with entries $A_{ij} = B_{ij}$,
+$A_{ji} = -B_{ij}$.  The commutator of bivectors maps directly to the
+matrix commutator $[A_1, A_2] = A_1 A_2 - A_2 A_1$.
 
-Bivectors form a Lie algebra under the commutator:
-$[B_1, B_2] = B_1 B_2 - B_2 B_1$.  This is isomorphic to
-$\mathfrak{so}(k)$.  The dimension is $k(k-1)/2$.
+This Lie algebra has dimension $k(k-1)/2$.  For $k = 256$, that is
+32,640 --- the number of independent bivector components, and
+equivalently the number of independent rotation planes.
+
+The commutator $[B_1, B_2]$ measures how much two rotations fail to
+commute.  If $[B_1, B_2] = 0$, the rotations are independent (they can
+be applied in either order).  If $[B_1, B_2] \neq 0$, the order matters
+--- and the commutator bivector tells you \emph{which plane} the
+non-commutativity lives in.
+
+\section{Reversion}
+
+The \textbf{reverse} $\rev{M}$ of a multivector reverses the order of
+all vector factors in each term:
+\[
+  \rev{(v_1 v_2 \cdots v_r)} = v_r \cdots v_2 v_1
+\]
+
+For a grade-$r$ element, this introduces a sign: $\rev{B_r} = (-1)^{r(r-1)/2} B_r$.
+In practice:
+\begin{itemize}[nosep]
+\item Grade 0 (scalar): $\rev{s} = s$
+\item Grade 1 (vector): $\rev{v} = v$
+\item Grade 2 (bivector): $\rev{B} = -B$
+\item Grade 3 (trivector): $\rev{T} = -T$
+\end{itemize}
+
+Reversion is the GA analog of matrix transposition.  For a rotor
+$R = \cos(\theta/2) - B\sin(\theta/2)$, the reverse is
+$\rev{R} = \cos(\theta/2) + B\sin(\theta/2) = R^{-1}$, which is the
+inverse rotation.
 
 \section{Duality and the pseudoscalar}
 
-The pseudoscalar $I = e_1 e_2 \cdots e_k$ maps grade-$r$ to
-grade-$(k-r)$.  In $\mathbb{R}^3$, this relates bivectors to vectors
-(the cross product).  In higher dimensions, bivectors are irreducible
-and more general than vectors.
+The \textbf{pseudoscalar} is the highest-grade basis element:
+\[
+  I_k = e_1 \, e_2 \, \cdots \, e_k
+\]
+
+It has a remarkable property: multiplying by $I_k$ maps a grade-$r$
+element to a grade-$(k-r)$ element.  This is called \textbf{duality}.
+
+\paragraph{In 3D.}
+$I_3 = e_1 e_2 e_3$ has $I_3^2 = -1$.  The dual of a bivector is a
+vector:
+\[
+  (e_1 \op e_2)\, I_3^{-1} = e_3
+\]
+This is exactly the cross product: $a \times b = (a \op b)\, I_3^{-1}$.
+The cross product is secretly a bivector in disguise, projected down
+to a vector via duality.
+
+\paragraph{In higher dimensions.}
+There is no cross product in $\mathbb{R}^k$ for $k > 3$ (the dual of a
+bivector is a $(k-2)$-vector, not a vector).  But the bivector itself
+is perfectly well-defined.  This is the key advantage of GA: bivectors
+work in any dimension, while the cross product is stuck in 3D.
+
+\section{What we use in this book}
+
+This book restricts attention to three grades:
+\begin{itemize}[nosep]
+\item \textbf{Grade 0}: scalars --- inner products, stretching factors,
+  eigenvalues.
+\item \textbf{Grade 1}: vectors --- hidden states, basis vectors.
+\item \textbf{Grade 2}: bivectors --- rotation planes, commutators,
+  curvature, holonomy.
+\end{itemize}
+
+We never need trivectors or higher-grade elements, because the
+operations we study (rotations, stretching, parallel transport) live entirely in the sub-algebra generated by grades~0 and~2 (scalars and bivectors). In the literature this is called the \textbf{even sub-algebra} $\mathrm{Cl}^+(k,0)$, but you do not need this name to follow the book.
+
+The matrix representations used throughout the book are:
+\begin{itemize}[nosep]
+\item Vectors: $\mathbb{R}^k$ arrays.
+\item Bivectors: $k \times k$ skew-symmetric matrices
+  ($A_{ij} = -A_{ji}$).
+\item Rotors: $k \times k$ orthogonal matrices ($R R^\top = I$),
+  with the bivector recovered via the matrix logarithm, Cayley map,
+  or Rodrigues formula.
+\end{itemize}
+
+This is why the \texttt{layer\_time\_ga} library stores bivectors as
+NumPy arrays rather than as $2^k$-dimensional multivector objects:
+in the grade-$\{0, 1, 2\}$ sector, the matrix representation is both
+compact and computationally efficient.
 
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -2402,10 +4685,10 @@ $ab^\top - ba^\top$ (skew) & Outer product $a \op b$ &
   Named as a bivector (oriented plane) \\
 Skew-symmetric $A$ & Bivector $B$ &
   Principal plane decomposition \\
-Orthogonal $U \in \mathrm{SO}(k)$ & Rotor $R = e^{-B/2}$ &
+Orthogonal matrix $U$ (rotation, det $= +1$) & Rotor $R = e^{-B/2}$ &
   Explicit plane + angle \\
 Polar decomposition $T = UP$ & Versor decomposition $T = RP$ &
-  Grade-2 $\times$ grade-0 separation \\
+  Rotation (plane information) cleanly separated from stretching (magnitude information) \\
 $\|U - I\|_F$ & Rotor angle $\theta$ &
   Plus: which plane \\
 $A_i A_j - A_j A_i$ & $[B_i, B_j]$ &
@@ -2463,7 +4746,7 @@ from layer_time_ga.decomposition import (
 )
 \end{lstlisting}
 
-\section{Curvature: \texttt{layer_time\_ga.curvature}}
+\section{Curvature: \texttt{layer\_time\_ga.curvature}}
 
 \begin{lstlisting}
 from layer_time_ga.curvature import (
@@ -2505,26 +4788,26 @@ Blade &
   outer product $a \op b$; represents one plane. \\
 Clifford algebra &
   The algebra $\mathrm{Cl}(k, 0)$ generated by vectors under
-  $v^2 = \|v\|^2$.  Contains all grades from 0 to $k$. \\
+  $v^2 = \|v\|^2$ (i.e., squaring a vector gives its squared length).  Contains all grades from 0 to $k$. \\
 Commutator &
   $[B_1, B_2] = B_1 B_2 - B_2 B_1$; a bivector measuring
   non-commutativity. \\
 Curvature bivector &
   $\log(R_{\text{loop}})$: the plane in which space is curved at a
-  grid point. \\
+  grid point; obtained from the holonomy rotor. \\
 Geometric product &
   $ab = a \ip b + a \op b$; the fundamental operation of GA. \\
 Grade &
   The ``type'' of an algebraic element: 0 = scalar, 1 = vector,
   2 = bivector. \\
 Holonomy &
-  The loop rotor from composing rotors around a closed path; measures
+  The rotor obtained by composing rotors around one cell of the layer-token grid; measures
   curvature. \\
 Metric factor &
   The symmetric positive-definite matrix $P$ from $T = RP$; encodes
   grade-0 stretching. \\
 Orthonormal frame &
-  Basis vectors with $e_i \ip e_j = \delta_{ij}$; required for valid GA
+  Basis vectors with $e_i \ip e_j = 1$ when $i=j$ and $0$ otherwise; required for valid GA
   operations. \\
 Principal plane &
   A simple-bivector component of a compound bivector; extracted via
@@ -2539,7 +4822,7 @@ Sandwich product &
 Versor decomposition &
   $T = RP$: separating rotation (grade-2) from stretching (grade-0). \\
 Whitening &
-  PCA-based dimensionality reduction that constructs an orthonormal frame. \\
+  PCA-based dimensionality reduction (PCA projection followed by unit-variance rescaling) that constructs an orthonormal frame. \\
 \bottomrule
 \end{tabular}
 \end{center}

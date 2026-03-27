@@ -70,6 +70,16 @@ from .capacity import (
     ga_capacity_profile,
 )
 
+from .generation import (
+    FrontierStep,
+    GenerationResult,
+    FrontierGA,
+    generate_with_frontier,
+    whiten_frontier,
+    compute_frontier_ga,
+    frontier_holonomy,
+)
+
 __all__ = [
     # Algebra primitives
     "Bivector",
@@ -112,4 +122,12 @@ __all__ = [
     "directional_flow_ratio",
     # Scalar holonomy map
     "holonomy_scalar_map",
+    # Generation / frontier
+    "FrontierStep",
+    "GenerationResult",
+    "FrontierGA",
+    "generate_with_frontier",
+    "whiten_frontier",
+    "compute_frontier_ga",
+    "frontier_holonomy",
 ]

@@ -4442,6 +4442,678 @@ the full bivector.
 \end{itemize}
 
 
+% ╔════════════════════════════════════════════════════════════════════════════╗
+% ║                                 PART V                                     ║
+% ╚════════════════════════════════════════════════════════════════════════════╝
+\part{Autoregressive Generation as Causal Frontier Geometry}
+\label{part:frontier}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
+\chapter{The Decode Frontier}
+\label{chap:frontier}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{whycare}
+Everything in Parts~I--IV analyses a transformer processing a
+\emph{fixed} prompt --- the layer--token grid is static.
+But real language models \emph{generate}: they extend the prompt one
+token at a time, each new token feeding back into the model.
+The geometric field is no longer a fixed rectangle; it grows a new
+column at every decode step.
+Understanding this expanding geometry is essential if GA is to say
+anything about how models actually produce text.
+\end{whycare}
+
+
+% ── 15.1 ─────────────────────────────────────────────────────────────────────
+\section{Why the static view is incomplete}
+\label{sec:frontier-static}
+
+Chapters~\ref{chap:versor}--\ref{chap:dependency} treat the
+hidden-state field $H^{(l)}_t$ as a fixed $(L+1) \times T$ matrix.
+That picture is correct for a single forward pass, but it hides
+three things about generation:
+
+\begin{enumerate}[nosep]
+\item \textbf{The grid grows.}  At decode step~$s$ the grid has
+  $T_0 + s$ columns, where $T_0$ is the prompt length.
+\item \textbf{Only the newest column is new.}  With the KV cache,
+  earlier columns are unchanged; only the rightmost column ---
+  the \textbf{frontier} --- carries fresh information.
+\item \textbf{The frontier feeds back.}  The logits produced from
+  the frontier determine the next token, which becomes the
+  frontier at step~$s+1$.  Generation is a causal, recurrent
+  process.
+\end{enumerate}
+
+\begin{transformer}
+During autoregressive generation, a transformer with a KV cache
+processes only the \emph{new} token at each step.  The key and value
+tensors for all previous tokens are stored and reused.
+For geometry, this means the hidden-state columns $H^{(l)}_{t}$ for
+$t < T_0 + s$ are fixed once computed; only the frontier column
+$H^{(l)}_{T_0+s}$ changes from step to step.
+The expanding grid is therefore fully characterised by the sequence
+of frontier columns.
+\end{transformer}
+
+
+% ── 15.2 ─────────────────────────────────────────────────────────────────────
+\section{The decode-step index}
+\label{sec:frontier-index}
+
+We augment the layer--token grid with a third index: the
+\textbf{decode step} $s = 0, 1, 2, \ldots$
+
+\begin{itemize}[nosep]
+\item $s = 0$: the model processes the full prompt.  The frontier
+  is the last prompt token.
+\item $s \geq 1$: the model generates token~$s$.  The frontier is
+  the hidden state at that token across all layers.
+\end{itemize}
+
+\paragraph{Notation.}
+Let $\hat{H}^{(l)}_s \in \mathbb{R}^k$ denote the whitened
+frontier hidden state at layer~$l$ and decode step~$s$.
+The full frontier at step~$s$ is the column vector
+$\hat{H}_s = [\hat{H}^{(1)}_s, \ldots, \hat{H}^{(L)}_s]$.
+We skip layer~0 (the embedding) as in earlier chapters.
+
+\begin{gabox}
+\textbf{The frontier as a moving column.}
+In the language of the layer--token grid (Chapter~\ref{chap:holonomy}),
+generation appends one column per step.
+Each new column's hidden states pass through the same sequence of
+layer transitions, producing a new set of rotors, bivectors, and
+curvature values.  The frontier is the rightmost edge of the
+expanding grid --- the boundary where geometry is actively being
+created.
+\end{gabox}
+
+
+% ── 15.3 ─────────────────────────────────────────────────────────────────────
+\section{Frontier rotation angle}
+\label{sec:frontier-angle}
+
+At each layer transition $(l \to l+1)$ and decode step~$s$, we
+measure how much the hidden state rotates:
+
+\[
+  \boxed{%
+    \theta^{(l)}_s
+    = \arccos\!\Bigl(
+        \frac{\hat{H}^{(l)}_s \cdot \hat{H}^{(l+1)}_s}
+             {\|\hat{H}^{(l)}_s\|\;\|\hat{H}^{(l+1)}_s\|}
+      \Bigr)
+  }
+\]
+
+This is identical to the rotation angle from
+Chapter~\ref{chap:rotors}, but now it varies across decode
+steps~$s$ as well as layers~$l$.  The result is a 2D field:
+$\theta^{(l)}_s$ for $l = 1, \ldots, L-1$ and $s = 0, \ldots, S$.
+
+\paragraph{What the data shows.}
+Figure~\ref{fig:frontier-angles} shows the frontier angle heatmaps
+for our three standard prompts (Qwen2.5-7B, greedy decoding, 50
+generation steps).
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_frontier_angles_3prompts.pdf}
+\caption{\textbf{Frontier rotation angle heatmaps} ($\theta^{(l)}_s$,
+layers $\times$ decode steps) for the three standard prompts.
+All three show a bright band near layer~25, matching the static
+peak from Chapter~\ref{chap:rotors}.  The Retrieval prompt
+maintains a stable horizontal band; the Adversarial prompt
+develops periodic vertical stripes once repetition begins.}
+\label{fig:frontier-angles}
+\end{figure}
+
+\begin{finding}
+The frontier angle field reveals two key patterns:
+
+\textbf{Layer structure is preserved.}
+All three prompts peak at layer~25 of~26 transitions, consistent
+with the static analysis.  Mean frontier angles are
+$0.59$~rad (Retrieval), $0.44$~rad (Reasoning), and
+$0.56$~rad (Adversarial).
+
+\textbf{Decode structure is prompt-dependent.}
+The Retrieval prompt shows a stable horizontal band --- the model
+applies similar rotations at each step as it retrieves factual
+continuations.  The Reasoning prompt shows lower overall
+angles, suggesting more conservative updates.
+The Adversarial prompt develops a striking 9-step periodic pattern
+once it collapses into the repetition
+``\,\texttt{. I want to know how to do it}\,'' (9~tokens per cycle).
+\end{finding}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_frontier_angle_summary_3prompts.pdf}
+\caption{\textbf{Layer-averaged frontier angle profiles.}
+Each curve averages $\theta^{(l)}_s$ across all decode steps at
+each layer.  The three prompts share the same peak at layer~25
+but differ in magnitude and shape.}
+\label{fig:frontier-angle-summary}
+\end{figure}
+
+\begin{analogy}
+Think of a river carving through rock.  The static view is a
+photograph of the canyon at one moment.  The frontier view is a
+time-lapse showing the river's edge advancing.  The canyon walls
+(layer structure) stay fixed, but the cutting edge (decode frontier)
+reveals how fast and where the river is deepening.
+\end{analogy}
+
+
+% ── 15.4 ─────────────────────────────────────────────────────────────────────
+\section{Cayley bivector at the frontier}
+\label{sec:frontier-cayley}
+
+The rotation angle $\theta^{(l)}_s$ tells us \emph{how much} the
+hidden state rotates, but not \emph{in which plane}.  To recover the
+plane, we use the \textbf{Cayley bivector} --- a closed-form
+skew-symmetric matrix that avoids the costly matrix logarithm.
+
+\begin{keyidea}
+For unit vectors $u$ and $v$ in $\mathbb{R}^k$, the Cayley bivector
+is:
+\[
+  A(u, v) = \frac{v\,u^\top - u\,v^\top}{1 + v^\top u}
+\]
+
+This is a rank-2 skew-symmetric matrix --- hence a bivector in
+$\mathrm{Cl}(k,0)$.  It satisfies $\exp(A) \, u = v$ to first
+order and is exact when $u$ and $v$ span a 2D subspace.
+Unlike the Rodrigues rotor of Chapter~\ref{chap:rotors}, which
+requires $\log R$ via a matrix logarithm, the Cayley form is a
+single closed-form expression.  This makes it practical for the
+frontier, where we must compute one bivector per layer per decode
+step (thousands of bivectors for a typical generation).
+\end{keyidea}
+
+At each layer transition and decode step, we compute:
+\[
+  A^{(l)}_s
+  = \frac{
+      \hat{u}^{(l+1)}_s \bigl(\hat{u}^{(l)}_s\bigr)^\top
+      - \hat{u}^{(l)}_s \bigl(\hat{u}^{(l+1)}_s\bigr)^\top
+    }{
+      1 + \bigl(\hat{u}^{(l+1)}_s\bigr)^\top \hat{u}^{(l)}_s
+    }
+\]
+
+where $\hat{u}^{(l)}_s = \hat{H}^{(l)}_s / \|\hat{H}^{(l)}_s\|$
+is the unit-normalised frontier vector.
+
+\begin{gabox}
+\textbf{Cayley vs.\ Rodrigues.}
+Chapter~\ref{chap:rotors} extracted the bivector generator via
+$B = \log R$ where $R$ is the orthogonal factor from polar
+decomposition.  The Rodrigues approach is exact for the full
+transformation but requires scipy's \texttt{logm}, which costs
+$O(k^3)$ per call.  The Cayley form trades the full-rank accuracy
+for closed-form speed: it captures the dominant rotation plane
+between two vectors without decomposing the full layer operator.
+For frontier analysis, where we need $\sim\!L \times S$ bivectors
+(e.g., $26 \times 51 = 1{,}326$ for Qwen2.5-7B generating 50
+tokens), Cayley is the practical choice.
+\end{gabox}
+
+\begin{pitfall}
+The Cayley bivector $A(u,v)$ is a rank-2 matrix regardless of
+the ambient dimension~$k$.  It captures only the \emph{dominant}
+rotation plane between $u$ and $v$.  If the actual layer
+transformation is a compound rotation in multiple planes (as
+Chapter~\ref{chap:versor} showed), the Cayley bivector misses the
+subdominant planes.  For frontier analysis this is acceptable:
+we are tracking the \emph{dominant} geometric signal at each step,
+not reconstructing the full layer operator.
+\end{pitfall}
+
+
+% ── 15.5 ─────────────────────────────────────────────────────────────────────
+\section{Incremental bivector and commutator spikes}
+\label{sec:frontier-commutator}
+
+With a bivector at every $(l, s)$ grid point, we can track how the
+rotation plane \emph{changes} from one decode step to the next.
+
+\paragraph{Incremental bivector.}
+The step-to-step change is:
+\[
+  \Delta A^{(l)}_s = A^{(l)}_s - A^{(l)}_{s-1}
+\]
+
+Its Frobenius norm $\|\Delta A^{(l)}_s\|_F$ measures how much the
+rotation plane has shifted at layer~$l$ between steps $s-1$
+and~$s$.
+
+\paragraph{Commutator.}
+As in Chapter~\ref{chap:commutators}, the commutator of successive
+bivectors detects when the rotation plane has genuinely
+\emph{reoriented} (not just changed magnitude):
+\[
+  [A^{(l)}_s,\, A^{(l)}_{s-1}]
+  = A^{(l)}_s A^{(l)}_{s-1} - A^{(l)}_{s-1} A^{(l)}_s
+\]
+
+If the model rotates in the same plane at steps $s-1$ and $s$,
+the commutator vanishes.  A nonzero commutator means the model has
+switched to a geometrically distinct rotation plane --- a
+\textbf{reorientation event}.
+
+\paragraph{What the data shows.}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_commutator_spikes_3prompts.pdf}
+\caption{\textbf{Commutator spikes at the frontier.}
+Layer-averaged commutator norm $\|[A^{(l)}_s, A^{(l)}_{s-1}]\|_F$
+at each decode step, with token labels.  Spikes mark reorientation
+events --- tokens where the model switches rotation plane.
+The Adversarial prompt shows periodic spikes at the cycle boundaries
+of its 9-token repetition.}
+\label{fig:commutator-spikes}
+\end{figure}
+
+\begin{finding}
+Commutator norms reveal the ``surprise'' structure of generation:
+
+\begin{itemize}[nosep]
+\item \textbf{Retrieval} (mean $\|[\cdot]\| = 0.10$):
+  moderate, with spikes at content-bearing tokens (dates, numbers,
+  proper nouns).
+\item \textbf{Reasoning} (mean $\|[\cdot]\| = 0.05$):
+  lowest overall --- the model maintains a consistent rotation plane
+  through the deductive chain.
+\item \textbf{Adversarial} (mean $\|[\cdot]\| = 0.08$):
+  periodic spikes at 9-step intervals, coinciding with the
+  boundaries of the repeating phrase.  Each cycle restart forces a
+  brief reorientation before the model re-enters the same orbit.
+\end{itemize}
+
+The commutator norm acts as a \emph{geometric surprise} signal:
+it is large precisely when the next token requires the model to
+rotate in a new direction.
+\end{finding}
+
+
+% ── 15.6 ─────────────────────────────────────────────────────────────────────
+\section{Plane drift: stability of the rotation plane}
+\label{sec:frontier-drift}
+
+A complementary view comes from measuring how stable the rotation
+plane is across decode steps.  Define the \textbf{plane drift}:
+\[
+  \boxed{%
+    d^{(l)}_s = 1 - \bigl|\cos(A^{(l)}_s,\, A^{(l)}_{s-1})\bigr|
+  }
+\]
+
+where the cosine is the Frobenius inner product normalised by the
+Frobenius norms:
+\[
+  \cos(A, B) = \frac{\langle A, B \rangle_F}{\|A\|_F\;\|B\|_F}
+  = \frac{\mathrm{tr}(A^\top B)}{\|A\|_F\;\|B\|_F}
+\]
+
+Drift $= 0$ means the plane is perfectly preserved; drift $= 1$
+means the successive bivectors are orthogonal (maximally different
+planes).
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_plane_drift_3prompts.pdf}
+\caption{\textbf{Plane drift at the frontier.}
+Layer-averaged drift $d^{(l)}_s$ across decode steps.
+All three prompts show high drift (mean $> 0.65$), indicating that
+the rotation plane changes substantially from step to step.
+The Reasoning prompt has the highest mean drift ($0.72$), consistent
+with each token in a deductive chain requiring a distinct
+geometric direction.}
+\label{fig:plane-drift}
+\end{figure}
+
+\begin{finding}
+Plane drift is high for all prompts: $0.66$ (Retrieval), $0.72$
+(Reasoning), $0.68$ (Adversarial).
+This means the model's rotation plane at each layer is
+\emph{not} preserved across decode steps --- even when the rotation
+angle is stable (as in the Retrieval prompt), the direction of
+rotation shifts.
+
+\textbf{Interpretation.}
+High drift with low commutator (Reasoning) means the plane rotates
+smoothly --- small, continuous adjustments.  High drift with periodic
+commutator spikes (Adversarial) means the plane snaps between
+discrete orientations at cycle boundaries.
+\end{finding}
+
+\begin{analogy}
+A figure skater spinning at constant speed (stable angle) can still
+reorient the axis of rotation --- tilting from vertical to
+horizontal.  The rotation speed stays the same, but the plane
+changes.  Plane drift measures this tilt; the commutator detects
+when the tilt happens abruptly.
+\end{analogy}
+
+
+% ── 15.7 ─────────────────────────────────────────────────────────────────────
+\section{Gauge consistency: the fixed whitening metric}
+\label{sec:frontier-gauge}
+
+A critical design choice underlies all frontier computations: the
+whitening metric is computed \textbf{once from the prompt} and then
+applied to every decode step.
+
+\begin{keyidea}
+The whitening metric $\Sigma^{-1/2}$ (Chapter~\ref{chap:frames})
+is estimated from the prompt's full hidden states --- all layers,
+all prompt tokens.  This gives a fixed coordinate frame.  Every
+frontier column is then projected into this frame:
+\[
+  \hat{H}^{(l)}_s = \Sigma^{-1/2}\bigl(H^{(l)}_s - \mu\bigr)
+\]
+
+where $\mu$ and $\Sigma$ are the mean and covariance of the
+prompt hidden states.  The whitening dimension is $k = 256$.
+\end{keyidea}
+
+\paragraph{Why fix the metric?}
+
+If we re-estimated the metric at each decode step (incorporating the
+new token), the coordinate frame would shift.  Quantities like
+$\theta^{(l)}_s$ and $A^{(l)}_s$ at different steps would live in
+different gauges, making step-to-step comparisons meaningless.
+
+By fixing the metric to the prompt, we ensure:
+
+\begin{enumerate}[nosep]
+\item All frontier vectors live in the same $k$-dimensional space.
+\item Angles, bivectors, and commutators are directly comparable
+  across steps.
+\item The prompt serves as a \textbf{reference geometry} against
+  which generation is measured.
+\end{enumerate}
+
+\begin{pitfall}
+If the generated text drifts far from the prompt's distribution
+(e.g., a code model suddenly generating poetry), the fixed metric
+may not capture the relevant directions.  In practice, for short
+generations ($S \leq 100$), the prompt metric is adequate.
+For very long generations, a sliding-window metric is an open
+research direction.
+\end{pitfall}
+
+
+% ── 15.8 ─────────────────────────────────────────────────────────────────────
+\section{Frontier holonomy}
+\label{sec:frontier-holonomy}
+
+The holonomy of Chapter~\ref{chap:holonomy} measures curvature
+at each plaquette of the layer--token grid.  At the frontier,
+each decode step creates a new column of plaquettes.
+
+\paragraph{Construction.}
+At decode step $s \geq 1$, we form a \emph{mini-grid} from
+the previous frontier column ($s-1$) and the current one ($s$):
+\[
+  G_s = \bigl[\hat{H}_{s-1},\; \hat{H}_s\bigr]
+  \qquad \text{shape: } (L, 2, k)
+\]
+
+Each layer transition in this mini-grid defines one plaquette.
+The holonomy rotor around each plaquette gives the
+\textbf{frontier curvature} $\kappa^{(l)}_s$.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_frontier_holonomy_3prompts.pdf}
+\caption{\textbf{Frontier holonomy heatmaps.}
+Scalar curvature $\kappa^{(l)}_s$ at frontier plaquettes
+(layers $\times$ decode steps).  The Retrieval prompt shows
+uniformly high curvature.  The Reasoning prompt has lower but
+more structured curvature.  The Adversarial prompt shows
+periodic banding at the 9-token cycle.}
+\label{fig:frontier-holonomy}
+\end{figure}
+
+\begin{finding}
+Mean frontier curvature:
+$0.89$ (Retrieval), $0.66$ (Reasoning), $0.81$ (Adversarial).
+
+These values are higher than the interior curvature from
+Chapter~\ref{chap:holonomy}, which makes physical sense: the
+frontier is where new information enters the model's representation,
+creating stronger geometric distortion than the settled interior.
+
+\textbf{The frontier is the high-curvature boundary of the
+expanding grid.}
+\end{finding}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_cumulative_curvature_3prompts.pdf}
+\caption{\textbf{Cumulative frontier curvature.}
+Running sum of layer-averaged curvature across decode steps.
+Retrieval accumulates curvature fastest (steepest slope);
+Reasoning accumulates slowest.  The Adversarial curve shows
+a steady staircase pattern reflecting its periodic cycle.}
+\label{fig:cumulative-curvature}
+\end{figure}
+
+
+% ── 15.9 ─────────────────────────────────────────────────────────────────────
+\section{Repetition collapse: a geometric signature}
+\label{sec:frontier-repetition}
+
+The Adversarial prompt provides a natural case study of generation
+failure.  After the prompt, the model immediately collapses into the
+9-token cycle ``\texttt{. I want to know how to do it}'' repeated
+indefinitely.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch15_token_frontier_summary_3prompts.pdf}
+\caption{\textbf{Per-token frontier summary.}
+Layer-averaged frontier angle (top) and commutator norm (bottom)
+at each decode step, annotated with the generated token.
+The Adversarial prompt shows the geometric fingerprint of
+repetition: a fixed 9-step pattern in both angle and commutator.}
+\label{fig:token-frontier-summary}
+\end{figure}
+
+\begin{finding}
+Repetition has a clear geometric fingerprint:
+
+\begin{enumerate}[nosep]
+\item \textbf{Periodic angle.}  The frontier angle at each layer
+  repeats with a period equal to the cycle length (9 tokens).
+  Each position in the cycle has a characteristic angle profile.
+\item \textbf{Periodic commutator.}  Commutator spikes recur at
+  the same relative positions within each cycle (typically at the
+  cycle boundary, where the period marker ``.'' resets the
+  sentence).
+\item \textbf{Constant cumulative curvature rate.}
+  The cumulative curvature curve becomes a straight line during
+  repetition: each cycle adds the same total curvature as the
+  previous one.  There is no new geometric information.
+\end{enumerate}
+
+\textbf{Geometric criterion for repetition:}
+a generation has collapsed into repetition when the frontier
+angle profile and commutator profile become periodic with period
+$P$, and the cumulative curvature becomes linear.  This criterion
+does not require looking at the tokens themselves --- it is purely
+geometric.
+\end{finding}
+
+\begin{keyidea}
+Repetition is a \textbf{geometric fixed orbit}: the frontier traces
+the same closed path in the GA field over and over.
+The model's rotor field has collapsed from a complex, evolving
+pattern to a simple periodic attractor.  Every cycle applies the
+same sequence of rotors, producing the same bivectors, the same
+commutators, and the same curvature.
+
+This gives a GA-native definition of repetition that does not
+depend on string matching.  A generation is \emph{geometrically
+novel} when the frontier angle, commutator, and curvature at
+step~$s$ cannot be predicted from the values at step~$s - P$ for
+any fixed period~$P$.
+\end{keyidea}
+
+
+% ── 15.10 ────────────────────────────────────────────────────────────────────
+\section{Code: running frontier analysis}
+\label{sec:frontier-code}
+
+The \texttt{layer\_time\_ga.generation} module implements all
+frontier computations.  Here is the complete pipeline:
+
+\begin{lstlisting}[caption={Frontier analysis pipeline}]
+from layer_time_ga import (
+    generate_with_frontier,
+    whiten_frontier,
+    compute_frontier_ga,
+    frontier_holonomy,
+)
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Load model
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2.5-7B",
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B")
+
+# Generate with frontier extraction
+result = generate_with_frontier(
+    model, tokenizer,
+    prompt="The Eiffel Tower is ...",
+    n_steps=50,
+    temperature=0.0,   # greedy decoding
+)
+
+# Whiten using fixed prompt metric
+result = whiten_frontier(result, whiten_components=256)
+
+# Compute GA quantities
+ga = compute_frontier_ga(result)
+# ga.angles:           (26, 51) frontier rotation angles
+# ga.commutator_norms: (26, 50) commutator norms
+# ga.plane_drift:      (26, 50) plane drift values
+
+# Frontier holonomy (GPU-accelerated)
+holo = frontier_holonomy(result, device="cuda")
+# holo: (26, 51) scalar curvature at frontier
+\end{lstlisting}
+
+\paragraph{Performance.}
+The main cost is the autoregressive generation itself.
+\texttt{compute\_frontier\_ga} uses the closed-form Cayley
+bivector and vectorised \texttt{numpy} operations (no
+\texttt{scipy.linalg.logm}), making it fast even for long
+generations.  \texttt{frontier\_holonomy} delegates to the
+GPU-batched holonomy computation from the backend.
+For Qwen2.5-7B generating 50 tokens, the full pipeline
+(generation + whitening + GA + holonomy) completes in under
+two minutes on a single GPU.
+
+
+% ── 15.11 ────────────────────────────────────────────────────────────────────
+\section{Summary and bridge to the next chapter}
+\label{sec:frontier-summary}
+
+This chapter introduced the \textbf{decode frontier} --- the
+rightmost column of the expanding layer--token grid during
+autoregressive generation.  By fixing the whitening metric to the
+prompt and extracting the frontier at each decode step, we
+extended the static GA framework to generation:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}\small
+\begin{tabular}{@{}L{3.2cm} L{4.5cm} L{4.5cm}@{}}
+\toprule
+\textbf{Quantity} & \textbf{Static (Ch.\,6--12)} &
+  \textbf{Frontier (this chapter)} \\
+\midrule
+Rotation angle &
+  $\theta^{(l)}$, one per layer &
+  $\theta^{(l)}_s$, one per layer per step \\
+Bivector &
+  $\bivec{l}$ via $\log R$ (Rodrigues) &
+  $A^{(l)}_s$ via Cayley (closed-form) \\
+Commutator &
+  $[\bivec{l}, \bivec{l+1}]$ (layer--layer) &
+  $[A^{(l)}_s, A^{(l)}_{s-1}]$ (step--step) \\
+Holonomy &
+  $\kappa^{(l)}_t$ on fixed grid &
+  $\kappa^{(l)}_s$ at expanding frontier \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{keyidea}
+\textbf{Three geometric regimes of generation.}
+
+The three prompts illustrate three qualitatively different frontier
+geometries:
+
+\begin{enumerate}[nosep]
+\item \textbf{Retrieval} (factual): high, stable frontier angles
+  and curvature; moderate commutator activity --- the model
+  confidently retrieves stored knowledge.
+\item \textbf{Reasoning} (deductive): lower angles and curvature
+  but highest plane drift --- the model makes careful, continuously
+  reorienting rotations through a logical chain.
+\item \textbf{Adversarial} (repetition collapse): periodic
+  patterns in all quantities with period~9 --- the frontier traces
+  a fixed orbit, the geometric signature of a degenerate
+  generation.
+\end{enumerate}
+\end{keyidea}
+
+\begin{tryit}
+\textbf{Notebook: Chapter 15.}
+The companion notebook
+\texttt{ch15\_decode\_frontier.ipynb} walks through the full
+pipeline: generating with frontier extraction, computing angles and
+bivectors, identifying commutator spikes, measuring plane drift,
+and computing frontier holonomy.
+
+\medskip
+\textbf{Exercises.}
+
+\begin{enumerate}[nosep]
+\item Run the frontier pipeline on a creative-writing prompt
+  (e.g., ``Once upon a time in a land far away'') with
+  temperature~$> 0$.  How does sampling affect frontier angle
+  stability compared to greedy decoding?
+
+\item Pick a layer with high commutator activity (e.g., layer~25).
+  Plot the full $k \times k$ Cayley bivector matrix at two
+  consecutive steps --- one where the commutator is large and one
+  where it is small.  How do the sparsity patterns differ?
+
+\item Implement a simple repetition detector: flag a generation as
+  ``collapsed'' when the frontier angle autocorrelation at lag~$P$
+  exceeds $0.9$ for some period $P < 20$.  Test it on the
+  Adversarial prompt and on a non-repetitive generation.
+
+\item Compare frontier holonomy between Qwen2.5-7B and a smaller
+  model (e.g., Qwen2.5-1.5B).  Does the smaller model show
+  higher frontier curvature, lower, or simply different spatial
+  patterns?
+\end{enumerate}
+\end{tryit}
+
+
 % ══════════════════════════════════════════════════════════════════════════════
 % APPENDICES
 % ══════════════════════════════════════════════════════════════════════════════

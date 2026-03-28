@@ -6448,6 +6448,96 @@ overrides the parametric prior --- a single number that
 summarises context influence across the entire hidden-state
 geometry at each layer.
 
+\subsection{When context fails: steering past parametric resistance}
+\label{sec:context-resistance}
+
+The three examples above show context that the model already follows.
+But context does not always win.  When parametric knowledge is deeply
+ingrained --- basic scientific facts, for instance --- the model may
+\emph{ignore} even explicit context and default to its training prior.
+
+\paragraph{A resistant example.}
+We embed counterfactual context about the Earth--Sun distance in a
+science-fiction framing:
+
+\begin{quote}\small
+``A science fiction novel describes a parallel universe where the laws
+of physics differ slightly. In one passage, a character mentions that
+the distance from the Earth to the Sun is approximately \textbf{50
+million miles} in that universe.  Later in the novel, a student
+recalls that the distance from the Earth to the Sun is approximately''
+\end{quote}
+
+\noindent
+Despite the explicit context, the model generates the parametric
+answer: ``\emph{93 million miles in our universe.}''  Context has
+failed.  Three other science prompts (speed of light, water's
+formula, Earth--Moon distance) all follow context, confirming that
+this resistance is prompt-specific, not universal.
+
+\paragraph{Detection.}
+The Cayley bivector still detects the context influence: $\tau = 0.70$
+($\theta = 69.9^\circ$) at layer~16, and the top-3 layers by $\tau$
+are layers~16, 17, and~14.  The model's hidden states \emph{are}
+affected by the context --- the rotation is substantial --- but the
+effect is not strong enough to overcome the parametric prior at the
+output.
+
+\paragraph{Steering overcomes resistance.}
+Applying Cayley steering in the prior$\to$posterior plane at the top-3
+layers simultaneously flips the output:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{}l c l@{}}
+\toprule
+\textbf{Condition} & $\alpha$ & \textbf{Generated text (first 80 chars)} \\
+\midrule
+No steering & --- & ``93 million miles in our universe.
+  If the student wants to calculate\ldots'' \\
+Single-layer (L16) & $0.5$ & ``93 million miles\ldots'' (parametric) \\
+Single-layer (L16) & $2.0$ & ``1 million miles in this universe\ldots'' (context) \\
+\textbf{Multi-layer (L16,17,14)} & $\bm{0.5}$ &
+  \textbf{``\ldots the distance\ldots in the parallel universe is 50 million
+  miles\ldots''} \\
+Multi-layer (L16,17,14) & $0.7$ & ``93,000,000 miles\ldots'' (other) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At multi-layer $\alpha = 0.5$, the model produces the exact context
+answer --- ``50 million miles'' --- that it refused to generate from
+context alone.  Single-layer steering requires a much larger magnitude
+($\alpha = 2.0$), and the result is less faithful to the context
+phrasing.  At higher magnitudes ($\alpha \ge 0.7$ multi-layer), text
+quality degrades, consistent with the angular purity loss described
+above.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures_ga_learning/ch16_steer_resistance_sweep.pdf}
+\caption{Steering sweep on the context-resistant ``Sun distance''
+  prompt.  (a)~Single-layer steering at layer~16: the model resists
+  until $\alpha = 2.0$.  (b)~Multi-layer steering at layers~16, 17,
+  14: context answer appears at $\alpha = 0.5$ with a narrow effective
+  window before quality degrades.}
+\label{fig:steer-resistance}
+\end{figure}
+
+\begin{finding}
+\textbf{Cayley steering can override parametric resistance that
+context alone cannot} (observed in Qwen2.5-7B, 1~example).
+When the model ignores explicit context ($\tau = 0.70$ at layer~16,
+but output defaults to parametric), multi-layer Cayley steering at
+moderate magnitude ($\alpha = 0.5$) across the top-3 layers by $\tau$
+produces the context answer.  The Cayley bivector identifies both
+\emph{where} and \emph{in which plane} to intervene; the only free
+parameter is the magnitude $\alpha$.  However, the effective window is
+narrow: too-small $\alpha$ has no effect; too-large $\alpha$ degrades
+coherence.  Robust context-following likely requires adaptive magnitude
+control, which remains an open problem.
+\end{finding}
+
 \subsection{Comparison of steering methods}
 
 The following table summarises the geometric character of common

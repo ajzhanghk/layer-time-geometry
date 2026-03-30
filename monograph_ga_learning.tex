@@ -1959,6 +1959,27 @@ In matrix language, this is the polar decomposition $T = UP$.  In GA
 language, it separates \textbf{grade-2 content} (the rotation plane and
 angle) from \textbf{grade-0 content} (the eigenvalues of the stretch).
 
+\begin{keyidea}
+\textbf{The transition operator is a Jacobian.}
+
+In deep-learning language, $T^{(l)}$ is the \textbf{local Jacobian
+matrix} of layer~$l$: the matrix of first-order partial derivatives
+\begin{equation}\label{eq:jacobian}
+  T^{(l)} \;\approx\; \frac{\partial H^{(l+1)}}{\partial H^{(l)}}\,.
+\end{equation}
+During back-propagation the gradient is multiplied by $T^{\top}$, so
+the versor decomposition is simultaneously a decomposition of the
+model's \emph{sensitivity}.  The rotor $\rotor{l}$ steers the
+gradient's direction; the metric factor $\metric{l}$ controls its
+magnitude.  Everything we do to $T$ in this book---extracting
+rotation planes, computing commutators, measuring curvature---is
+therefore an analysis of how sensitivity is structured across the
+network.  We will return to this connection explicitly in
+Chapter~\ref{chap:dependency}, where gradient-based dependency
+density weights the geometric features by their functional
+importance.
+\end{keyidea}
+
 \section{Extracting the rotor field}
 
 Before we show the extraction code, let us clarify what a ``rotor
@@ -3034,6 +3055,32 @@ independent.  You can verify this numerically as a sanity check on
 your computations.  It also means that the \emph{third} BCH correction
 term above is not free --- it is determined by lower-order commutators.
 
+\begin{keyidea}
+\textbf{The metric as gain control.}
+
+The commutator $[\bivec{l}, \bivec{l+1}]$ measures the clash between
+two rotation planes, but the \emph{energy} available in those planes
+is set by the metric factor $\metric{l}$.  Recall from
+Chapter~\ref{chap:eigenvalues} that a high condition number $\kappa$
+means the metric aggressively amplifies some directions while
+suppressing others.  This ``gain control'' has two consequences for
+commutators:
+
+\begin{enumerate}[nosep]
+\item A large commutator norm in a direction that the metric
+  suppresses ($\sigma_i \ll 1$) contributes little to the actual
+  hidden-state change---the rotation is real but energetically weak.
+\item Conversely, when the metric amplifies a direction
+  ($\sigma_i \gg 1$) that also participates in a commutator, the
+  non-commutative effect is functionally \emph{amplified}.
+\end{enumerate}
+
+We will formalise this interaction in Chapter~\ref{chap:dependency}
+when we weight geometric features by gradient sensitivity.  For now,
+keep in mind that the ``size'' of a commutator in representation space
+depends on both the rotation \emph{and} the stretch.
+\end{keyidea}
+
 \section{Why transformers care about order}
 
 The mathematics above is general.  Here is what it means in our
@@ -3241,6 +3288,31 @@ different transformations depending on whether you go ``layer first,
 then token'' vs.\ ``token first, then layer,'' the grid is curved at
 that plaquette.
 \end{analogy}
+
+\begin{pitfall}
+\textbf{Curvature is twist on a stretched fabric.}
+
+Parallel transport moves vectors by applying \emph{rotors}, but those
+vectors live in a space that is simultaneously \emph{stretched} by
+the metric factor~$P$.  The rotor determines the \textbf{twist}
+(direction change), while the metric determines the
+\textbf{elasticity} (which directions carry energy).
+
+\begin{itemize}[nosep]
+\item \textbf{Grade-2 (curvature):} measures how much the semantic
+  \emph{direction} changes around a loop.
+\item \textbf{Grade-0 (metric):} measures how much the signal
+  \emph{magnitude} is amplified or suppressed along each leg.
+\end{itemize}
+
+A plaquette can have large curvature in a direction the metric nearly
+kills, making the interaction geometrically rich but functionally
+weak.  Conversely, modest curvature in a heavily amplified direction
+may dominate the model's behaviour.  This dual-track view---twist
+versus elasticity---will become quantitative in
+Chapter~\ref{chap:dependency} when we weight curvature by gradient
+sensitivity.
+\end{pitfall}
 
 % ── Figure: Parallel transport and holonomy on the grid ────────────
 \begin{figure}[ht]
@@ -3804,6 +3876,55 @@ shift observed in Chapter~\ref{chap:commutators}.}
 \end{tryit}
 
 
+\subsection*{Bridge: from geometric work to functional impact}
+
+At this stage we have a comprehensive \emph{rotational story} for
+the transformer.  We mapped the planes in which the model rotates its
+representations (Chapter~\ref{chap:planes}), identified the
+non-commutative clashes between layers
+(Chapter~\ref{chap:commutators}), and measured the resulting curvature
+of the computational grid (Chapter~\ref{chap:holonomy}).  Collectively,
+these tools describe \textbf{capacity}: the total geometric ``work''
+the model invests in its forward pass.
+
+A critical question remains: \textbf{does all of this geometric
+activity actually matter for the final prediction?}
+
+Recall that the layer transition operator is a Jacobian
+(Equation~\ref{eq:jacobian}).  The rotor steers the gradient's
+direction; the metric factor controls its magnitude.  In Part~III we
+focused on the rotation side---planes, commutators, curvature---while
+the metric played a supporting role as ``gain control'' for the
+bivectors.  Now we reunite the two tracks.
+
+\medskip
+\begin{center}
+\renewcommand{\arraystretch}{1.3}\small
+\begin{tabular}{@{} l l l @{}}
+\toprule
+\textbf{Concept} & \textbf{Rotational story (Grade-2)}
+  & \textbf{Metric story (Grade-0)} \\
+\midrule
+Action & Reorients semantic direction
+  & Amplifies or suppresses features \\
+Interaction & Commutator: disagreement of planes
+  & Jacobian: sensitivity to input \\
+Grid property & Curvature: path-dependence of meaning
+  & Selectivity: path-dependence of energy \\
+Functional role & Steering: pointing toward the answer
+  & Selection: ensuring the answer wins \\
+\bottomrule
+\end{tabular}
+\end{center}
+\medskip
+
+Chapter~\ref{chap:dependency} introduces \textbf{dependency density}
+$D_l$, which measures gradient sensitivity at each layer.  By weighting
+our geometric features by $D_l$, we will identify the
+\emph{mechanistic bottlenecks}---the specific layers where the
+geometric twist of a rotation meets the decisive functional power of
+the metric to determine the output.
+
 % ══════════════════════════════════════════════════════════════════════════════
 \chapter{Which Planes Matter?}
 \label{chap:dependency}
@@ -3816,6 +3937,13 @@ actually matter for the model's output?  \textbf{Dependency density}
 answers this question by measuring gradient sensitivity at each layer.
 Combined with the bivector structure, it tells us which \emph{planes of
 rotation} drive the prediction.
+
+In Chapter~\ref{chap:versor} we identified the transition operator $T^{(l)}$
+as the local Jacobian (Equation~\ref{eq:jacobian}), and in
+Chapter~\ref{chap:commutators} we noted that the metric acts as a
+``gain control'' for commutators.  This chapter makes those observations
+quantitative: dependency density is the tool that converts geometric
+features into functionally weighted ones.
 \end{whycare}
 
 \section{Dependency density}
@@ -3825,7 +3953,12 @@ output logits with respect to the hidden state:
 \begin{equation}
   D_l = \left\|\frac{\partial s}{\partial H^{(l)}}\right\|_F
 \end{equation}
-In words: $D_l$ measures how sensitive the model's final prediction is to small changes in the hidden state at layer~$l$. Large $D_l$ means the output depends strongly on what happens at that layer.
+In words: $D_l$ measures how sensitive the model's final prediction is
+to small changes in the hidden state at layer~$l$.  Large $D_l$ means
+the output depends strongly on what happens at that layer.  Because
+$T^{(l)}$ is the Jacobian (Equation~\ref{eq:jacobian}), $D_l$ is
+directly shaped by the metric factor's eigenvalues: layers where
+$\metric{l}$ amplifies many directions tend to have higher~$D_l$.
 
 This is a scalar per layer.  It does not depend on GA --- it is a
 standard gradient computation.
@@ -3888,6 +4021,14 @@ eigenvalues --- small in norm --- sit at the high-dependency layers
 that control the output.  Grade-2 is geometrically loud but
 functionally quieter; grade-0 is geometrically quiet but
 functionally decisive.
+
+This confirms the ``gain control'' intuition from
+Chapter~\ref{chap:commutators}: a commutator that is large in a
+direction the metric suppresses contributes little effective work,
+while even a modest rotation in a metric-amplified direction can
+dominate the prediction.  The metric story, seemingly secondary since
+Chapter~\ref{chap:eigenvalues}, turns out to be the story of
+\emph{which geometry matters}.
 
 \section{Dependency-weighted bivectors}
 

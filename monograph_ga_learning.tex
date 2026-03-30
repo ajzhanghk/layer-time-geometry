@@ -3417,30 +3417,73 @@ discrete analogue of curvature in differential geometry: the failure
 of parallel transport to return a vector unchanged.
 \end{transformer}
 
-The curvature bivector at each plaquette is:
-\begin{equation}
-  \Omega(l,t) = \log R_{\text{loop}}(l,t)
-\end{equation}
-This is the full geometric object: its norm is the curvature magnitude,
-and its principal planes reveal \emph{which} dimensions of representation
-space are curved.
+The next section formalises the two quantities we extract from the
+holonomy rotor: a \textbf{curvature magnitude} (how much) and a
+\textbf{curvature bivector} (which plane).
 
 \section{The holonomy rotor}
 
-If $R_{\text{loop}} = I$ (identity rotor), the plaquette is flat.
-Otherwise:
-\begin{itemize}[nosep]
-\item $\|R_{\text{loop}} - I\|_F$ = \textbf{curvature magnitude}
-  (a single number measuring curvature; we use `scalar curvature' informally --- this is not the Ricci scalar of Riemannian geometry).
-\item $\log(R_{\text{loop}})$ = \textbf{curvature bivector}
-  (an oriented plane --- \emph{which} plane is curved).
-  The matrix logarithm recovers the bivector that generates this loop rotation --- it tells you \emph{which plane} is curved.
-\end{itemize}
+If $R_{\text{loop}} = I$ (identity rotor), the plaquette is flat:
+the two paths give the same result, and layer and token
+transformations commute at that grid cell.  Otherwise, the plaquette
+is curved, and we need to quantify \emph{how much} and \emph{in
+which plane}.
+
+\begin{mathbox}
+\textbf{Curvature magnitude and the curvature bivector.}
+
+The holonomy rotor $R_{\text{loop}}^{(l,t)}$ captures the full
+geometric content of curvature at plaquette $(l,t)$.  We extract two
+complementary quantities from it:
+
+\begin{enumerate}[nosep]
+\item \textbf{Curvature magnitude} $K$\,(a scalar):
+\begin{equation}
+\label{eq:scalar-curvature}
+  K^{(l,t)} = \|R_{\text{loop}}^{(l,t)} - I\|_F
+\end{equation}
+This is a single number measuring how far the loop rotor deviates
+from the identity.  When $K = 0$, the plaquette is flat (the rotors
+commute perfectly).  A larger $K$ indicates more interactive,
+non-separable computation --- the model's ``token-first'' and
+``layer-first'' paths produce increasingly different
+orientations.\footnote{We sometimes call $K$ the ``scalar curvature''
+because it is a scalar (a single number), as distinct from the
+curvature bivector (a matrix).  Readers familiar with Riemannian
+geometry should note that $K$ is a \emph{discrete computational
+construction} --- the Frobenius deviation of a loop rotor from
+identity --- and is not the Ricci scalar, which involves contraction
+of a smooth curvature tensor.}
+
+\item \textbf{Curvature bivector} $\Omega$\,(a direction):
+\begin{equation}
+  \Omega^{(l,t)} = \log\!\big(R_{\text{loop}}^{(l,t)}\big)
+\end{equation}
+The matrix logarithm recovers the skew-symmetric generator of the
+loop rotation.  Its principal planes (via the eigendecomposition from
+Section~\ref{sec:principal-planes}) reveal \emph{which dimensions} of
+representation space are curved.
+\end{enumerate}
+
+\textbf{Why use $\|R_{\text{loop}} - I\|_F$ instead of
+$\|\log R_{\text{loop}}\|_F$?}  For small curvatures the two are
+approximately equal, but the Frobenius norm is cheaper to compute
+(no matrix logarithm required).  We use it for the
+\textbf{Nonseparability Index} $\mathcal{D} = \sum_{l,t}
+K^{(l,t)}$ --- a single number that sums the curvature magnitude
+over the entire grid, measuring total geometric entanglement.  Think
+of $\mathcal{D}$ as the model's total \textbf{interaction budget}: a
+value of zero means layers and tokens are independent (simple lookup);
+a large value means the model is working hard to integrate context
+through non-trivial geometric twists.
+\end{mathbox}
 
 \begin{keyidea}
-Scalar curvature tells you \emph{how much}.  The holonomy bivector tells
-you \emph{which direction}.  Two plaquettes can have the same scalar
-curvature but curve in different planes.  The bivector distinguishes them.
+Curvature magnitude tells you \emph{how much}.  The curvature bivector
+tells you \emph{which plane}.  Two plaquettes can have the same
+curvature magnitude but curve in completely different planes ---
+different dimensions of the representation space are entangled.  The
+bivector distinguishes them.
 \end{keyidea}
 
 \section{Computing holonomy}
@@ -3511,24 +3554,26 @@ The holonomy map gives curvature at every plaquette.  To summarise the
 sum it up:
 
 \begin{gabox}
-\textbf{Nonseparability index.}
+\textbf{Nonseparability index (total interaction budget).}
 \begin{equation}
+\label{eq:nonsep-index}
   \mathcal{D} = \sum_{l=0}^{L-2}\sum_{t=0}^{T-2}
+    K^{(l,t)}
+  = \sum_{l=0}^{L-2}\sum_{t=0}^{T-2}
     \|R_{\mathrm{loop}}^{(l,t)} - I\|_F
 \end{equation}
-Each term $\|R_{\mathrm{loop}} - I\|_F$ is the scalar curvature
-(deviation from identity) at plaquette $(l, t)$.  Note: this uses
-$R_{\mathrm{loop}} - I$, not the curvature bivector
-$\Omega = \log R_{\mathrm{loop}}$ from above.  For small curvature
-the two are approximately equal, but $R - I$ is cheaper to compute.
+Each term $K^{(l,t)}$ is the curvature magnitude
+(Equation~\eqref{eq:scalar-curvature}) at plaquette $(l, t)$.
 \end{gabox}
 
-Think of $\mathcal{D}$ as a ``total curvature budget.''  If
-$\mathcal{D} = 0$, the hidden-state field is \emph{separable}: the
+If $\mathcal{D} = 0$, the hidden-state field is \emph{separable}: the
 layer transformations and token transformations are independent, and the
-model is doing a simple lookup.  In other words, `separable' means you could factor the full transformation as a product of a layer-only part and a token-only part, with no interaction --- like a function $f(x,y) = g(x) \cdot h(y)$.  If $\mathcal{D} > 0$, the model is
-performing genuinely interactive computation --- the kind where \emph{which
-token you are} changes \emph{what the layer does}.
+model is doing a simple lookup.  ``Separable'' means you could factor
+the full transformation as a product of a layer-only part and a
+token-only part, with no interaction --- like a function
+$f(x,y) = g(x) \cdot h(y)$.  If $\mathcal{D} > 0$, the model is
+performing genuinely interactive computation --- the kind where
+\emph{which token you are} changes \emph{what the layer does}.
 
 The normalised version $\bar{\mathcal{D}} = \mathcal{D} /
 ((L-1)(T-1))$ is the mean curvature per plaquette, which is comparable
@@ -3553,15 +3598,15 @@ qualitatively different about what the model is doing:
 \renewcommand{\arraystretch}{1.3}\small
 \begin{tabular}{@{} l l l @{}}
 \toprule
-\textbf{Regime} & \textbf{Holonomy signature} & \textbf{Interpretation} \\
+\textbf{Regime} & \textbf{Curvature magnitude $K$} & \textbf{Interpretation} \\
 \midrule
-\textbf{Flat} & $\|\Omega\| \approx 0$ everywhere
+\textbf{Flat} & $K \approx 0$ everywhere
   & Separable; simple lookup or memorisation \\
-\textbf{Low curvature} & $\|\Omega\|$ small, smooth
+\textbf{Low curvature} & $K$ small, smooth
   & Weakly interactive; straightforward recall \\
-\textbf{High curvature} & $\|\Omega\|$ large, structured
+\textbf{High curvature} & $K$ large, structured
   & Strongly interactive; multi-step reasoning \\
-\textbf{Chaotic} & $\mathrm{Var}(\|\Omega\|) \gg 0$
+\textbf{Chaotic} & $\mathrm{Var}(K) \gg 0$
   & Unstable; potential hallucination \\
 \bottomrule
 \end{tabular}
@@ -3610,7 +3655,7 @@ These are complementary diagnostics.
 \begin{center}
 \includegraphics[width=0.95\linewidth]{figures_ga_learning/ch10_holonomy_3prompts.pdf}
 \captionof{figure}{Holonomy curvature for three prompt types.
-Top: scalar curvature maps (layer $\times$ token).
+Top: curvature magnitude maps (layer $\times$ token).
 Bottom: mean curvature by layer.  Peak curvature is at layers~24--26
 in all cases (architecture-intrinsic), but the distribution differs.
 Reasoning (centre) spreads curvature over more tokens; adversarial
@@ -4337,7 +4382,7 @@ The holonomy rotor around each plaquette gives the
 \centering
 \includegraphics[width=\linewidth]{figures_ga_learning/ch15_frontier_holonomy_3prompts.pdf}
 \caption{\textbf{Frontier holonomy heatmaps.}
-Scalar curvature $\mathcal{K}^{(l)}_s$ at frontier plaquettes
+Curvature magnitude $\mathcal{K}^{(l)}_s$ at frontier plaquettes
 (layers $\times$ decode steps).  The Retrieval prompt shows
 uniformly high curvature.  The Reasoning prompt has lower but
 more structured curvature.  The Adversarial prompt shows
@@ -4883,8 +4928,8 @@ orbit --- the same planes recur with 9-step periodicity.
 \section{Curvature direction at the frontier}
 \label{sec:cap-curv-direction}
 
-Chapter~\ref{chap:frontier} computed scalar frontier curvature
-$\mathcal{K}^{(l)}_s$.  Scalar curvature answers \emph{how much} the
+Chapter~\ref{chap:frontier} computed frontier curvature magnitude
+$\mathcal{K}^{(l)}_s$.  Curvature magnitude answers \emph{how much} the
 grid is curved; it does not answer \emph{in which direction}.
 The full holonomy rotor (Chapter~\ref{chap:holonomy}) carries a
 bivector that names the curvature plane.
@@ -6354,7 +6399,7 @@ representation.
 
 \begin{finding}
 \textbf{Curvature plane shift is a stronger indicator than magnitude
-change} (observed in this example).  Scalar curvature magnitude may
+change} (observed in this example).  Curvature magnitude may
 change by only 10--20\%, but the \emph{direction} of curvature can
 shift substantially, indicating
 qualitatively different computation.  This is information that scalar
@@ -6727,7 +6772,7 @@ failure where the model's reasoning \emph{direction} is reversed
 relative to the expected information flow.  A hallucinating model
 may show near-zero or negative BCcos at layers where a factual model
 shows positive values --- the fabricated narrative flows in the wrong
-causal direction even when scalar curvature looks normal.
+causal direction even when curvature magnitude looks normal.
 
 % ────────────────────────────────────────────────────────────────────
 \section{Application 4: Plane-specific steering}

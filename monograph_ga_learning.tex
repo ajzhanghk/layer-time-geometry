@@ -541,6 +541,7 @@ each vector is computed using all tokens.}
 \paragraph{How mixing and indexing coexist.}
 In the attention mechanism, the update for token~$t$ can be written as:
 \begin{equation}
+\label{eq:attention-update}
   H^{(l+1)}(t)
   \;=\;
   \sum_{s=1}^{T} \alpha_{t,s}^{(l)} \; V^{(l)}(s),
@@ -2241,10 +2242,27 @@ spatially structured across tokens.}
 \end{figure}
 
 Although a transformer layer is implemented as shared-weight matrix
-operations, its effect is position-dependent because attention mixes
-tokens differently at each position.  The rotor field makes this
-spatial structure visible: different tokens undergo different geometric
-operations, even within a single layer.
+operations, its effect is position-dependent.  Quantitatively, the
+source of this diversity is the attention update rule
+(Equation~\eqref{eq:attention-update} from Chapter~1):
+\begin{equation}
+  H^{(l+1)}(t)
+  \;=\;
+  \sum_{s=1}^{T} \alpha_{t,s}^{(l)} \; V^{(l)}(s).
+\end{equation}
+The value vectors $V^{(l)}(s)$ are computed with weights shared across
+all positions, but the \textbf{attention weights}
+$\alpha_{t,s}^{(l)}$ are unique to each position~$t$ --- they depend
+on how strongly token~$t$ ``listens'' to each other token~$s$.
+Because the summation weights differ, the output $H^{(l+1)}(t)$ is
+different for every token, even though the underlying parameters are
+shared.  The operator $T^{(l)}(t)$ in
+Equation~\eqref{eq:rotor-field} is the linearised best fit of this
+position-specific update, which we then decompose into the rotor
+$R^{(l)}(t)$ and metric factor $P^{(l)}(t)$.
+
+The rotor field makes this spatial structure visible: different tokens
+undergo different geometric operations, even within a single layer.
 
 \begin{gabox}
 \textbf{From local linearisation to rotor.}
@@ -2516,16 +2534,54 @@ the unique diagnostic capability that GA provides.
 
 \section{Principal plane extraction}
 
+\begin{mathbox}
+\textbf{Recap: where principal planes come from.}
+In Section~\ref{sec:principal-planes} (Chapter~3) we showed that every
+bivector --- a skew-symmetric matrix $B$ --- can be decomposed via
+eigendecomposition into \textbf{principal planes}.  Because $B^\top =
+-B$, its eigenvalues are purely imaginary, arriving in conjugate pairs
+$\pm i\sigma_j$.  Each pair identifies one 2D rotation plane, and
+the magnitude $\sigma_j$ is the rotation angle (in radians) within
+that plane.  This is the rotational analogue of PCA: instead of
+finding the directions of maximum \emph{variance}, we find the planes
+of maximum \emph{rotation} (Figure~\ref{fig:principal-planes}).
+
+The bivector itself was extracted from the layer transition operator
+$T^{(l)}$ via the pipeline described in Section~6.2: least-squares
+fit in the joint token subspace, polar decomposition, matrix
+logarithm, and lifting to the full whitened space.
+
+Here we apply that machinery to every layer and track how the planes
+evolve across the network.
+\end{mathbox}
+
 The bivector $\bivec{l}$ at layer $l$ is a $k \times k$ skew-symmetric
 matrix.  Its eigendecomposition gives conjugate pairs $\pm i\sigma_j$,
 where:
 \begin{itemize}[nosep]
-\item $\sigma_j$ is the \textbf{rotation angle} in plane $j$.
-\item The corresponding eigenvectors span the \textbf{plane}.
+\item $\sigma_j$ is the \textbf{rotation angle} in plane $j$ --- the
+  ``weight'' reported in the code and figures below.  A large $\sigma_j$
+  means that plane carries a large share of the layer's rotation energy.
+\item The corresponding eigenvectors span the \textbf{plane} --- the 2D
+  subspace in which the rotation acts.
 \end{itemize}
 
 Ordering by $\sigma_j$ gives the principal planes.  Typically, the top
 3--5 planes carry $>80\%$ of the total rotation.
+
+\begin{pitfall}
+\textbf{``Singular value weight'' = rotation magnitude $\sigma_j$.}
+The figures in this chapter label the $y$-axis ``singular value
+weight.''  This is the same $\sigma_j$ we have been calling the
+rotation angle.  It arises because our code computes the
+\textbf{singular values} of the skew-symmetric bivector matrix
+$\bivec{l}$.  For any skew-symmetric matrix, the singular values come
+in pairs and are exactly the magnitudes $\sigma_j$ from the eigenvalue
+pairs $\pm i\sigma_j$.  So ``singular value weight,'' ``rotation
+angle,'' and ``eigenvalue magnitude'' all refer to the same quantity.
+A large $\sigma_j$ means that plane~$j$ carries a large share of the
+layer's total rotation.
+\end{pitfall}
 
 \begin{lstlisting}[caption={Principal planes of a layer's bivector}]
 # Inspect layer 20's rotation planes
@@ -2607,9 +2663,11 @@ operations.
 
 \begin{center}
 \includegraphics[width=0.85\linewidth]{figures_ga_learning/ch07_plane_evolution.pdf}
-\captionof{figure}{Bivector plane evolution: the top-3 principal plane weights
-as a stacked area chart across layers.  The dominant plane shifts around
-mid-network.}
+\captionof{figure}{Bivector plane evolution: the top-3 principal plane
+weights (singular values $\sigma_j$ of the bivector matrix, i.e.\ the
+rotation magnitude in each plane) as a stacked area chart across layers.
+The dominant plane shifts around mid-network, indicating that early and
+late layers rotate in different geometric directions.}
 \end{center}
 
 \medskip
@@ -2658,19 +2716,49 @@ eigenvalue spectrum and understand how stretch evolves across layers.
 
 \section{Eigenvalue spectra}
 
-The metric factor $\metric{l}$ is a symmetric positive-definite matrix
-with eigenvalues $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k > 0$.
+\begin{mathbox}
+\textbf{What is a spectrum?}
+
+The \textbf{spectrum} of a matrix is its ordered set of eigenvalues
+(or singular values).  If you think of the metric factor $\metric{l}$
+as a lens through which data passes, the spectrum is the lens's
+\textbf{magnification profile}: it tells you, for each independent
+direction in the data, by how much that direction is amplified or
+shrunk.
 
 \begin{itemize}[nosep]
-\item $\sigma_i = 1$ for all $i$: the metric factor is the identity;
-  the layer only rotates (no stretching).
-\item $\sigma_1 \gg \sigma_k$: the layer strongly amplifies some
-  directions and suppresses others.
+\item A \textbf{flat spectrum} (all values near~$1.0$): the lens
+  magnifies every direction equally --- the layer only rotates, it
+  does not reshape.
+\item A \textbf{steep spectrum} ($\sigma_1 \gg \sigma_k$): the lens
+  magnifies a few directions and crushes the rest --- the layer is
+  highly selective, keeping only certain features and discarding
+  others.
+\end{itemize}
+
+While the bivector (grade-2) tells you \emph{where} the model looks
+--- which planes it rotates in --- the spectrum (grade-0) tells you
+\emph{what it chooses to keep}.  Reading the spectrum is reading the
+model's focus.
+\end{mathbox}
+
+The metric factor $\metric{l}$ is a symmetric positive-definite matrix.
+Because it is symmetric, its eigenvalues are all real and positive.  We
+order them as $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k > 0$.
+Two summary statistics capture the spectrum's shape:
+
+\begin{itemize}[nosep]
 \item $\kappa = \sigma_1 / \sigma_k$: the \textbf{condition number}.
+  When $\kappa = 1$ all directions are treated equally (the layer is a
+  pure rotation).  When $\kappa \gg 1$ the layer strongly amplifies
+  some directions and suppresses others.
 \item $\mathrm{erank} = \exp H(\hat{\sigma})$: the \textbf{effective
   rank}, where $H(\hat{\sigma}) = -\sum_i \hat{\sigma}_i \log
   \hat{\sigma}_i$ is the Shannon entropy of the normalised spectrum
-  $\hat{\sigma}_i = \sigma_i / \sum_j \sigma_j$.
+  $\hat{\sigma}_i = \sigma_i / \sum_j \sigma_j$.  This counts,
+  roughly, how many directions are actively used: a flat spectrum gives
+  $\mathrm{erank} \approx k$; a steep one gives $\mathrm{erank}
+  \approx 1$.
 \end{itemize}
 
 \paragraph{Well-determined directions.}
@@ -2703,12 +2791,33 @@ will quantify which role has more impact on the output.
 \end{keyidea}
 
 \begin{mathbox}
-For a layer with versor decomposition $T = RP$, the Jacobian of the
-layer w.r.t.\ the input is $T$ itself.  During backpropagation, the
-gradient is multiplied by $T^\top = P^\top R^\top = PR^\top$.  The
-rotation $R^\top$ preserves the gradient's magnitude; the stretching
-$P$ amplifies or suppresses it.  Gradient flow is controlled by the
-singular values of $P$.
+\textbf{Gradient flow through the versor decomposition.}
+
+Each transformer layer acts as a function $f$ that maps
+$H^{(l)} \mapsto H^{(l+1)}$.  The \textbf{Jacobian} of $f$ is the
+matrix of all first-order partial derivatives: entry $(i,j)$ records
+how much a small change in the $j$-th component of $H^{(l)}$ affects
+the $i$-th component of $H^{(l+1)}$.  If the layer transition is
+approximately linear ($H^{(l+1)} \approx T\, H^{(l)}$), the Jacobian
+is simply $T$ itself.
+
+During training, gradients flow \emph{backward} through the network.
+At each layer, the gradient is multiplied by the transpose of the
+Jacobian: $T^\top = P^\top R^\top = P\,R^\top$ (since $P$ is
+symmetric).  What happens to the gradient in each factor?
+
+\begin{itemize}[nosep]
+\item The rotation $R^\top$ \textbf{changes the gradient's direction}
+  but preserves its magnitude ($\|R^\top g\| = \|g\|$, because
+  rotations are norm-preserving).
+\item The stretching $P$ \textbf{amplifies or suppresses the
+  gradient's magnitude}: directions with large $\sigma_i$ get
+  amplified, and directions with small $\sigma_i$ get suppressed.
+\end{itemize}
+
+Gradient flow --- and therefore what the model can learn --- is
+controlled by the singular values of $P$, not by the rotation.
+Rotation steers; stretching selects which signals survive.
 \end{mathbox}
 
 \section{Reading the spectrum}
@@ -2925,6 +3034,48 @@ independent.  You can verify this numerically as a sanity check on
 your computations.  It also means that the \emph{third} BCH correction
 term above is not free --- it is determined by lower-order commutators.
 
+\section{Why transformers care about order}
+
+The mathematics above is general.  Here is what it means in our
+transformer laboratory.
+
+\begin{keyidea}
+\textbf{Commutativity as computational depth.}
+
+We have already extracted a bivector field $\{\bivec{l}\}$ where each
+$\bivec{l}$ encodes the rotation a layer applies
+(Chapter~\ref{chap:versor}).  The commutator $[\bivec{l},
+\bivec{l+1}]$ lets us classify adjacent layer pairs:
+
+\begin{itemize}[nosep]
+\item \textbf{Small commutator} ($\|[\bivec{l}, \bivec{l+1}]\|
+  \approx 0$): the two layers rotate in the same or orthogonal planes.
+  Their rotations commute, so the model could have performed both in a
+  single, larger step.  The computation is \emph{parallelisable} ---
+  depth is not essential here.
+\item \textbf{Large commutator}: the layers rotate in different,
+  non-orthogonal planes.  Layer $l+1$ is doing work that
+  \emph{depends} on the specific orientation established by layer $l$.
+  The computation is genuinely \emph{sequential} --- depth matters.
+\end{itemize}
+
+Crucially, because the commutator is itself a bivector, we can
+decompose it into principal planes (using the same eigendecomposition
+from Section~\ref{sec:principal-planes}).  This tells us not just
+\emph{how much} two layers disagree, but \emph{in which plane} the
+disagreement is concentrated --- which semantic dimensions are causing
+the ``clash'' between layers.
+\end{keyidea}
+
+When we compute commutators for all layer pairs across the network,
+the resulting \textbf{commutator field} becomes a map of
+\emph{computational interaction}.  A bright spot in the heatmap
+(Section~\ref{sec:commutator-field} below) marks the exact point
+where the model performs a geometric turn that cannot be simplified.
+In Chapter~\ref{chap:capacity}, we will sum these commutator norms
+to obtain a single number --- the \textbf{compositional capacity} ---
+measuring the total non-commutativity across the network.
+
 \section{Computing commutators}
 
 \begin{lstlisting}[caption={Commutator of two bivectors}]
@@ -2946,6 +3097,7 @@ print("This directional info is invisible to ||[B_i,B_j]||_F!")
 \end{lstlisting}
 
 \section{The commutator field}
+\label{sec:commutator-field}
 
 For all pairs of layers, compute $\|[\bivec{i}, \bivec{j}]\|_F$.  This
 gives a symmetric matrix (the \textbf{commutator field}) that shows
@@ -8196,6 +8348,11 @@ Grade &
 Holonomy &
   The rotor obtained by composing rotors around one cell of the layer-token grid; measures
   curvature. \\
+Jacobian &
+  The matrix of all first-order partial derivatives of a vector
+  function; entry $(i,j)$ records how the $i$-th output changes with
+  the $j$-th input.  For a linear layer $H^{(l+1)} \approx T\,H^{(l)}$,
+  the Jacobian is $T$ itself. \\
 Metric factor &
   The symmetric positive-definite matrix $P$ from $T = RP$; encodes
   grade-0 stretching. \\

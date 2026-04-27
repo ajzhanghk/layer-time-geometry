@@ -61,8 +61,8 @@ Homepage = "https://github.com/agus-sudjianto/layer-time"
 Documentation = "https://github.com/agus-sudjianto/layer-time#readme"
 
 [tool.setuptools]
-packages = ["layer_time", "layer_time_ga", "market_ga"]
-py-modules = ["layer_time_geometry", "ltg", "ltg_ga", "mga"]
+packages = ["layer_time", "layer_time_ga"]
+py-modules = ["layer_time_geometry", "ltg", "ltg_ga"]
 
 [tool.setuptools.package-data]
 layer_time = ["py.typed"]
